@@ -1,0 +1,30 @@
+{
+    "version": "1.0.0",
+    "min_python_version": [3, 6],
+    "required_disk_space_mb": 100,
+    "check_dependencies": true,
+    "auto_create_missing_files": true,
+    "update_interval": 5,
+    "module_ports": {
+        "question_bank": 5000,
+        "grading_center": 3000,
+        "grading_center_frontend": 5173,
+        "exam_management": 5001,
+        "client": 8080
+    },
+    "enable_resource_monitoring": true,
+    "auto_restart_crashed_modules": false,
+    "system": {
+        "name": "PH&RL 在线考试系统",
+        "organization": "PH&RL 教育科技",
+        "contact_email": "support@phrl-exam.com",
+        "website": "https://www.phrl-exam.com",
+        "copyright": "© 2024 PH&RL 教育科技. 保留所有权利。"
+    },
+    "logging": {
+        "level": "INFO",
+        "max_file_size_mb": 10,
+        "backup_count": 5,
+        "console_output": true
+    }
+}

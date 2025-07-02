@@ -1,0 +1,115 @@
+# PH&RL 在线考试系统 - 依赖包列表
+# 生成时间: 2025-01-07
+# Python版本: 3.6+
+
+# Web框架
+Flask==2.3.3
+Flask-Bcrypt==0.7.1
+Flask-CORS==3.0.10
+Flask-JWT-Extended==4.3.1
+Flask-Migrate==3.1.0
+Flask-SQLAlchemy==2.5.1
+flask-swagger-ui==5.21.0
+Werkzeug==3.0.3
+
+# 数据库相关
+SQLAlchemy==2.0.41
+alembic==1.16.1
+mysql-connector-python==8.4.0
+PyMySQL==1.0.2
+
+# 数据处理
+pandas==2.3.0
+numpy==1.26.4
+openpyxl==3.1.4
+
+# GUI框架
+tk==0.1.0
+
+# 图像处理
+Pillow==11.2.1
+
+# 系统监控
+psutil==5.9.8
+
+# 网络请求
+requests==2.32.3
+urllib3==2.2.1
+
+# 加密和安全
+bcrypt==4.3.0
+cryptography==45.0.4
+PyJWT==2.10.1
+python-jose==3.5.0
+
+# 文档处理
+python-docx==1.1.2
+beautifulsoup4==4.12.3
+lxml==5.4.0
+
+# 配置管理
+python-dotenv==1.1.0
+iniconfig==2.1.0
+
+# 测试框架
+pytest==8.4.0
+
+# 打包工具
+pyinstaller==6.14.1
+pyinstaller-hooks-contrib==2025.5
+
+# 工具库
+click==8.1.7
+colorama==0.4.6
+six==1.16.0
+setuptools==80.9.0
+wheel==0.45.1
+packaging==25.0
+
+# 时间处理
+python-dateutil==2.9.0.post0
+pytz==2024.1
+tzdata==2024.1
+
+# 其他依赖
+certifi==2024.6.2
+charset-normalizer==3.3.2
+idna==3.7
+importlib_metadata==7.1.0
+itsdangerous==2.2.0
+Jinja2==3.1.4
+MarkupSafe==2.1.5
+typing_extensions==4.13.2
+zipp==3.19.2
+
+# 开发工具
+watchdog==6.0.0
+Pygments==2.19.1
+
+# Windows特定
+pywin32-ctypes==0.2.3
+
+# 其他
+altgraph==0.17.4
+asgiref==3.8.1
+blinker==1.9.0
+cffi==1.17.1
+ecdsa==0.19.1
+et_xmlfile==2.0.0
+greenlet==3.2.2
+Mako==1.3.10
+passlib==1.7.4
+pefile==2023.2.7
+pluggy==1.6.0
+protobuf==5.27.0
+pyasn1==0.6.1
+pycparser==2.22
+python-multipart==0.0.20
+rsa==4.9.1
+soupsieve==2.5
+sqlparse==0.5.3
+
+# Django相关（如果需要）
+Django==4.2.7
+django-cors-headers==4.3.1
+djangorestframework==3.14.0

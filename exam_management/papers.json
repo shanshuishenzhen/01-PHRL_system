@@ -1,0 +1,221 @@
+{
+  "papers": [
+    {
+      "id": "980a99d4-e0ae-4a8a-9906-870ef4389c32",
+      "name": "样例题库 - 自动组卷_第5套",
+      "total_score": 100,
+      "pass_score": 60,
+      "questions": [
+        {
+          "id": 1,
+          "type": "single_choice",
+          "content": "计算机的核心部件是什么？",
+          "options": ["CPU", "内存", "硬盘", "显卡"],
+          "answer": "CPU",
+          "score": 10
+        },
+        {
+          "id": 2,
+          "type": "multiple_choice",
+          "content": "以下哪些是输入设备？",
+          "options": ["键盘", "鼠标", "显示器", "打印机"],
+          "answer": ["键盘", "鼠标"],
+          "score": 10
+        },
+        {
+          "id": 3,
+          "type": "true_false",
+          "content": "CPU是计算机的大脑。",
+          "answer": true,
+          "score": 10
+        },
+        {
+          "id": 4,
+          "type": "fill_blank",
+          "content": "在Python中，用于格式化字符串的函数是__________。",
+          "answer": "format",
+          "score": 10
+        },
+        {
+          "id": 5,
+          "type": "short_answer",
+          "content": "简述计算机病毒的特点和防范措施。",
+          "answer": "计算机病毒的特点：传染性、隐蔽性、潜伏性、破坏性。防范措施：安装杀毒软件、定期更新系统补丁、不打开可疑邮件附件、备份重要数据。",
+          "score": 10
+        }
+      ]
+    },
+    {
+      "id": "5eb6f12e-45b6-44a7-a3bd-1d27cea32e59",
+      "name": "样例题库 - 自动组卷_第4套",
+      "total_score": 100,
+      "pass_score": 60,
+      "questions": [
+        {
+          "id": 1,
+          "type": "single_choice",
+          "content": "以下哪个不是操作系统？",
+          "options": ["Windows", "Linux", "macOS", "Office"],
+          "answer": "Office",
+          "score": 10
+        },
+        {
+          "id": 2,
+          "type": "multiple_choice",
+          "content": "以下哪些是编程语言？",
+          "options": ["Python", "Java", "Word", "C++"],
+          "answer": ["Python", "Java", "C++"],
+          "score": 10
+        },
+        {
+          "id": 3,
+          "type": "true_false",
+          "content": "HTTP是一种安全的协议。",
+          "answer": false,
+          "score": 10
+        },
+        {
+          "id": 4,
+          "type": "fill_blank",
+          "content": "计算机网络中最基本的协议是__________。",
+          "answer": "TCP/IP",
+          "score": 10
+        },
+        {
+          "id": 5,
+          "type": "short_answer",
+          "content": "简述云计算的优势和应用场景。",
+          "answer": "云计算的优势：弹性伸缩、按需付费、高可用性、降低IT成本。应用场景：网站托管、大数据处理、人工智能训练、企业办公系统等。",
+          "score": 10
+        }
+      ]
+    },
+    {
+      "id": "0e927814-3da5-4604-b1a9-88ccf01cfa83",
+      "name": "样例题库 - 自动组卷_第3套",
+      "total_score": 100,
+      "pass_score": 60,
+      "questions": [
+        {
+          "id": 1,
+          "type": "single_choice",
+          "content": "计算机的核心部件是什么？",
+          "options": ["CPU", "内存", "硬盘", "显卡"],
+          "answer": "CPU",
+          "score": 10
+        },
+        {
+          "id": 2,
+          "type": "multiple_choice",
+          "content": "以下哪些是输入设备？",
+          "options": ["键盘", "鼠标", "显示器", "打印机"],
+          "answer": ["键盘", "鼠标"],
+          "score": 10
+        },
+        {
+          "id": 3,
+          "type": "true_false",
+          "content": "CPU是计算机的大脑。",
+          "answer": true,
+          "score": 10
+        },
+        {
+          "id": 4,
+          "type": "fill_blank",
+          "content": "在Python中，用于格式化字符串的函数是__________。",
+          "answer": "format",
+          "score": 10
+        },
+        {
+          "id": 5,
+          "type": "short_answer",
+          "content": "简述计算机病毒的特点和防范措施。",
+          "answer": "计算机病毒的特点：传染性、隐蔽性、潜伏性、破坏性。防范措施：安装杀毒软件、定期更新系统补丁、不打开可疑邮件附件、备份重要数据。",
+          "score": 10
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "name": "计算机基础知识测试",
+      "total_score": 100,
+      "pass_score": 60,
+      "questions": [
+        {
+          "id": 1,
+          "type": "single_choice",
+          "content": "计算机的核心部件是什么？",
+          "options": ["CPU", "内存", "硬盘", "显卡"],
+          "answer": "CPU",
+          "score": 10
+        },
+        {
+          "id": 2,
+          "type": "multiple_choice",
+          "content": "以下哪些是输入设备？",
+          "options": ["键盘", "鼠标", "显示器", "打印机"],
+          "answer": ["键盘", "鼠标"],
+          "score": 10
+        },
+        {
+          "id": 3,
+          "type": "true_false",
+          "content": "CPU是计算机的大脑。",
+          "answer": true,
+          "score": 10
+        },
+        {
+          "id": 4,
+          "type": "fill_blank",
+          "content": "在Python中，用于格式化字符串的函数是__________。",
+          "answer": "format",
+          "score": 10
+        },
+        {
+          "id": 5,
+          "type": "short_answer",
+          "content": "简述计算机病毒的特点和防范措施。",
+          "answer": "计算机病毒的特点：传染性、隐蔽性、潜伏性、破坏性。防范措施：安装杀毒软件、定期更新系统补丁、不打开可疑邮件附件、备份重要数据。",
+          "score": 10
+        },
+        {
+          "id": 6,
+          "type": "single_choice",
+          "content": "以下哪个不是操作系统？",
+          "options": ["Windows", "Linux", "macOS", "Office"],
+          "answer": "Office",
+          "score": 10
+        },
+        {
+          "id": 7,
+          "type": "multiple_choice",
+          "content": "以下哪些是编程语言？",
+          "options": ["Python", "Java", "Word", "C++"],
+          "answer": ["Python", "Java", "C++"],
+          "score": 10
+        },
+        {
+          "id": 8,
+          "type": "true_false",
+          "content": "HTTP是一种安全的协议。",
+          "answer": false,
+          "score": 10
+        },
+        {
+          "id": 9,
+          "type": "fill_blank",
+          "content": "计算机网络中最基本的协议是__________。",
+          "answer": "TCP/IP",
+          "score": 10
+        },
+        {
+          "id": 10,
+          "type": "short_answer",
+          "content": "简述云计算的优势和应用场景。",
+          "answer": "云计算的优势：弹性伸缩、按需付费、高可用性、降低IT成本。应用场景：网站托管、大数据处理、人工智能训练、企业办公系统等。",
+          "score": 10
+        }
+      ]
+    }
+  ]
+}

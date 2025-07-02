@@ -1,0 +1,185 @@
+version: '3.8'
+
+services:
+  # API网关
+  api-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.gateway
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=production
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./logs:/app/logs
+      - ./config:/app/config
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - phrl-network
+
+  # 题库管理服务
+  question-bank:
+    build:
+      context: .
+      dockerfile: Dockerfile.question_bank
+    ports:
+      - "5000:5000"
+    environment:
+      - DATABASE_URL=postgresql://phrl:password@postgres:5432/phrl_db
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - ./question_bank_web:/app
+      - ./common:/app/common
+      - ./logs:/app/logs
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - phrl-network
+
+  # 考试管理服务
+  exam-management:
+    build:
+      context: .
+      dockerfile: Dockerfile.exam_management
+    ports:
+      - "5001:5001"
+    environment:
+      - DATABASE_URL=postgresql://phrl:password@postgres:5432/phrl_db
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - ./exam_management:/app
+      - ./common:/app/common
+      - ./logs:/app/logs
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - phrl-network
+
+  # 阅卷中心服务
+  grading-center:
+    build:
+      context: .
+      dockerfile: Dockerfile.grading_center
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://phrl:password@postgres:5432/phrl_db
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - ./grading_center:/app
+      - ./common:/app/common
+      - ./logs:/app/logs
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - phrl-network
+
+  # 用户管理服务
+  user-management:
+    build:
+      context: .
+      dockerfile: Dockerfile.user_management
+    ports:
+      - "5002:5002"
+    environment:
+      - DATABASE_URL=postgresql://phrl:password@postgres:5432/phrl_db
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - ./user_management:/app
+      - ./common:/app/common
+      - ./logs:/app/logs
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - phrl-network
+
+  # 成绩统计服务
+  score-statistics:
+    build:
+      context: .
+      dockerfile: Dockerfile.score_statistics
+    ports:
+      - "5003:5003"
+    environment:
+      - DATABASE_URL=postgresql://phrl:password@postgres:5432/phrl_db
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - ./score_statistics:/app
+      - ./common:/app/common
+      - ./logs:/app/logs
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - phrl-network
+
+  # 系统监控服务
+  monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile.monitor
+    ports:
+      - "9090:9090"
+    environment:
+      - MONITOR_INTERVAL=30
+      - ALERT_EMAIL_ENABLED=false
+    volumes:
+      - ./common:/app/common
+      - ./logs:/app/logs
+      - ./data:/app/data
+    networks:
+      - phrl-network
+
+  # PostgreSQL数据库
+  postgres:
+    image: postgres:13
+    environment:
+      - POSTGRES_DB=phrl_db
+      - POSTGRES_USER=phrl
+      - POSTGRES_PASSWORD=password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - phrl-network
+
+  # Redis缓存
+  redis:
+    image: redis:6-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - phrl-network
+
+  # Nginx反向代理
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./ssl:/etc/nginx/ssl
+    depends_on:
+      - api-gateway
+    networks:
+      - phrl-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  phrl-network:
+    driver: bridge

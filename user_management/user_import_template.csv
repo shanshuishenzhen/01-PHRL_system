@@ -1,0 +1,5 @@
+username,real_name,ID,role,email,password,phone,department,status
+student001,张三,123456789012345678,student,zhangsan@example.com,123456,13800138001,计算机系,active
+student002,李四,123456789012345679,student,lisi@example.com,123456,13800138002,计算机系,active
+examiner001,王老师,123456789012345680,examiner,wang@example.com,123456,13800138003,计算机系,active
+admin001,管理员,123456789012345681,admin,admin@example.com,123456,13800138004,信息技术部,active 

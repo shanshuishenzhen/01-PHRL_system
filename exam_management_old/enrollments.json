@@ -1,0 +1,8 @@
+{
+  "enrollments": [
+    {
+      "exam_id": 1,
+      "user_ids": [2, 3]
+    }
+  ]
+} 

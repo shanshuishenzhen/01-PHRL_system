@@ -1,0 +1,22 @@
+{
+  "enrollments": [
+    {
+      "exam_id": "ca7652db-5acf-4a39-8812-9ffcdee869ca",
+      "user_ids": [
+        "bf44f113-f882-4cdc-972a-8e8aca6064ae",
+        "3dff1e1b-35ec-4ebb-9d63-8b75fdc9f861",
+        "47cd845e-c9cf-4385-b83f-335d88e3094d"
+      ],
+      "status": "active",
+      "created_at": "2025-07-02T16:12:35.055662"
+    },
+    {
+      "exam_id": "d239145a-6039-4239-86c4-1f7f9b6a29e9",
+      "user_ids": [
+        "1640ffbe-5661-49a3-b2e3-7c24215e828c"
+      ],
+      "status": "active",
+      "created_at": "2025-07-02T16:45:25.214108"
+    }
+  ]
+}

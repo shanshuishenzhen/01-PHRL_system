@@ -1,0 +1,23 @@
+{
+    "server": {
+      "host": "127.0.0.1",
+      "port": 5000,
+      "protocol": "http"
+    },
+    "security": {
+      "encryption": true,
+      "session_timeout": 3600,
+      "auto_save_interval": 30
+    },
+    "ui": {
+      "fullscreen": true,
+      "disable_shortcuts": true,
+      "font_size": 12,
+      "theme": "light"
+    },
+    "network": {
+      "retry_attempts": 3,
+      "retry_interval": 5,
+      "connection_timeout": 10
+    }
+} 
