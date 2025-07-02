@@ -39,7 +39,30 @@ echo 开始推送到GitHub...
 echo 注意: 如果提示输入用户名和密码，请使用GitHub用户名和Personal Access Token
 echo.
 
+echo 尝试方法1: 直接推送...
 git push -u origin main
+
+if %errorlevel% neq 0 (
+    echo.
+    echo 方法1失败，尝试方法2: 设置代理配置...
+    git config --global http.proxy ""
+    git config --global https.proxy ""
+    git push -u origin main
+)
+
+if %errorlevel% neq 0 (
+    echo.
+    echo 方法2失败，尝试方法3: 增加超时时间...
+    git config --global http.lowSpeedLimit 1000
+    git config --global http.lowSpeedTime 300
+    git push -u origin main
+)
+
+if %errorlevel% neq 0 (
+    echo.
+    echo 方法3失败，尝试方法4: 强制推送...
+    git push -f origin main
+)
 
 if %errorlevel% eq 0 (
     echo.
