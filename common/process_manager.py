@@ -43,17 +43,21 @@ config_manager = ConfigManager()
 def start_module(module_name, module_path, port=None, cwd=None, auto_restart=False):
     """
     启动系统模块
-    
+
     Args:
         module_name (str): 模块名称
         module_path (str): 模块文件路径
         port (int, optional): 模块使用的端口
         cwd (str, optional): 工作目录
         auto_restart (bool, optional): 是否自动重启
-        
+
     Returns:
         dict: 模块信息，包括进程ID、启动时间等
     """
+    # 特殊处理阅卷中心模块
+    if module_name == "grading_center":
+        return start_grading_center_module(module_path, cwd, auto_restart)
+
     # 检查模块文件是否存在
     if not os.path.exists(module_path):
         return {
@@ -62,7 +66,7 @@ def start_module(module_name, module_path, port=None, cwd=None, auto_restart=Fal
             "pid": None,
             "start_time": None
         }
-    
+
     # 如果指定了端口，检查端口是否可用
     if port is not None and not check_port_available(port):
         return {
@@ -71,11 +75,11 @@ def start_module(module_name, module_path, port=None, cwd=None, auto_restart=Fal
             "pid": None,
             "start_time": None
         }
-    
+
     # 设置工作目录
     if cwd is None:
         cwd = os.path.dirname(module_path)
-    
+
     # 根据操作系统选择启动方式
     if os.name == 'nt':  # Windows
         # 在新的命令行窗口中启动模块
@@ -89,14 +93,14 @@ def start_module(module_name, module_path, port=None, cwd=None, auto_restart=Fal
             stderr=subprocess.PIPE,
             cwd=cwd
         )
-    
+
     # 等待一段时间，确保进程启动
     time.sleep(1)
-    
+
     # 获取进程ID和启动时间
     pid = process.pid
     start_time = time.time()
-    
+
     return {
         "status": "starting",
         "message": f"模块 {module_name} 正在启动",
@@ -106,14 +110,137 @@ def start_module(module_name, module_path, port=None, cwd=None, auto_restart=Fal
     }
 
 
+def start_grading_center_module(module_path, cwd=None, auto_restart=False):
+    """
+    启动阅卷中心模块（Python Flask）
+
+    Args:
+        module_path (str): 模块文件路径（simple_grading_server.py）
+        cwd (str, optional): 工作目录
+        auto_restart (bool, optional): 是否自动重启
+
+    Returns:
+        dict: 模块信息，包括进程ID、启动时间等
+    """
+    import subprocess
+    import time
+    import os
+    import sys
+
+    # 设置工作目录
+    if cwd is None:
+        cwd = os.path.dirname(module_path)
+
+    port = 5173  # Flask服务端口
+
+    # 检查端口是否可用
+    if not check_port_available(port):
+        return {
+            "status": "error",
+            "message": f"端口 {port} 已被占用",
+            "pid": None,
+            "start_time": None
+        }
+
+    # 检查模块文件是否存在
+    if not os.path.exists(module_path):
+        return {
+            "status": "error",
+            "message": f"阅卷中心文件不存在: {module_path}",
+            "pid": None,
+            "start_time": None
+        }
+
+    try:
+        # 启动Python Flask服务器
+        if os.name == 'nt':  # Windows
+            # 使用虚拟环境的Python（如果存在）
+            venv_python = os.path.join(os.path.dirname(os.path.dirname(cwd)), "venv", "Scripts", "python.exe")
+            if os.path.exists(venv_python):
+                python_exe = venv_python
+            else:
+                python_exe = sys.executable
+
+            cmd = f'start cmd /k "cd /d {cwd} && "{python_exe}" simple_grading_server.py"'
+            process = subprocess.Popen(cmd, shell=True)
+        else:  # Linux/Mac
+            process = subprocess.Popen(
+                [sys.executable, "simple_grading_server.py"],
+                cwd=cwd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+
+        # 等待服务启动
+        time.sleep(3)
+
+        # 检查服务是否启动成功
+        service_available = not check_port_available(port)
+
+        if service_available:
+            # 自动打开浏览器
+            try:
+                import webbrowser
+                webbrowser.open(f"http://localhost:{port}")
+            except:
+                pass
+
+            return {
+                "status": "running",
+                "message": "阅卷中心启动成功",
+                "pid": process.pid,
+                "start_time": time.time(),
+                "port": port,
+                "url": f"http://localhost:{port}",
+                "auto_restart": auto_restart
+            }
+        else:
+            return {
+                "status": "error",
+                "message": f"阅卷中心启动失败 - 端口 {port} 未响应",
+                "pid": None,
+                "start_time": None
+            }
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"启动阅卷中心时发生错误: {str(e)}",
+            "pid": None,
+            "start_time": None
+        }
+
+
+def check_port_available(port, host="127.0.0.1"):
+    """
+    检查端口是否可用
+
+    Args:
+        port (int): 端口号
+        host (str, optional): 主机地址
+
+    Returns:
+        bool: 端口是否可用
+    """
+    import socket
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(1)
+            result = sock.connect_ex((host, port))
+            return result != 0
+    except Exception:
+        return False
+
+
 def check_numpy_import_issue(module_name, cwd):
     """
     检查并解决numpy导入问题
-    
+
     Args:
         module_name (str): 模块名称
         cwd (str): 工作目录
-        
+
     Returns:
         tuple: (是否需要特殊处理, 环境变量字典)
     """
@@ -387,7 +514,7 @@ def get_module_path(module_name):
     module_paths = {
         "main_console": base_dir / "main_console.py",
         "question_bank": base_dir / "question_bank_web" / "app.py",
-        "grading_center": base_dir / "grading_center" / "server" / "app.js",
+        "grading_center": base_dir / "grading_center" / "simple_grading_server.py",
         "exam_management": base_dir / "exam_management" / "simple_exam_manager.py",
         "client": base_dir / "client" / "client_app.py",
         "user_management": base_dir / "user_management" / "simple_user_manager.py",

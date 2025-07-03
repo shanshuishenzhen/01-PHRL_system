@@ -80,7 +80,7 @@ class LauncherApp:
             "grading_center": {
                 "status": "stopped",
                 "pid": None,
-                "port": None
+                "port": 5173  # Vue.js前端端口，用于浏览器访问
             },
             "exam_management": {
                 "status": "stopped",
@@ -93,6 +93,11 @@ class LauncherApp:
                 "port": None
             },
             "user_management": {
+                "status": "stopped",
+                "pid": None,
+                "port": None
+            },
+            "developer_tools": {
                 "status": "stopped",
                 "pid": None,
                 "port": None
@@ -263,12 +268,21 @@ class LauncherApp:
         
         # 客户端按钮
         self.client_btn = create_button(
-            quick_launch_frame, 
-            _("launcher.client", "客户端"), 
+            quick_launch_frame,
+            _("launcher.client", "客户端"),
             lambda: self.start_client(),
             width=20
         )
         self.client_btn.pack(fill="x", pady=5)
+
+        # 开发工具按钮
+        self.developer_tools_btn = create_button(
+            quick_launch_frame,
+            _("launcher.developer_tools", "开发工具"),
+            lambda: self.start_developer_tools(),
+            width=20
+        )
+        self.developer_tools_btn.pack(fill="x", pady=5)
         
         # 创建右侧面板
         right_frame = ttk.Frame(main_frame)
@@ -370,6 +384,12 @@ class LauncherApp:
                 "name": _("launcher.user_management", "用户管理"),
                 "status": self.module_status["user_management"]["status"],
                 "port": self.module_status["user_management"]["port"]
+            },
+            {
+                "id": "developer_tools",
+                "name": _("launcher.developer_tools", "开发工具"),
+                "status": self.module_status["developer_tools"]["status"],
+                "port": self.module_status["developer_tools"]["port"]
             }
         ]
         
@@ -502,7 +522,7 @@ class LauncherApp:
                     return False
             else:
                 # 2. 安装必要的包
-                packages = ["flask", "pandas", "numpy", "openpyxl", "pillow", "requests"]
+                packages = ["flask", "pandas", "numpy", "openpyxl", "Pillow", "requests"]
                 logger.info(f"安装必要的包: {', '.join(packages)}")
                 
                 cmd = f"\"{pip_path}\" install {' '.join(packages)}"
@@ -650,18 +670,26 @@ class LauncherApp:
         """
         try:
             # 核心依赖列表（必须安装的基础依赖）
-            core_packages = ["flask", "pandas", "openpyxl", "pillow", "requests", "psutil"]
+            # 修复：使用正确的包名和导入名称映射
+            core_packages = {
+                "flask": "flask",
+                "pandas": "pandas",
+                "openpyxl": "openpyxl",
+                "pillow": "PIL",  # Pillow包的导入名称是PIL
+                "requests": "requests",
+                "psutil": "psutil"
+            }
             missing_packages = []
             outdated_packages = []
             
             # 检查核心依赖是否已安装
-            for package in core_packages:
-                installed, _, version = self.check_package_version(package)
-                if installed:
-                    logger.info(f"{package}库已安装，版本: {version}")
-                else:
-                    logger.warning(f"{package}库未安装，将添加到安装列表")
-                    missing_packages.append(package)
+            for package_name, import_name in core_packages.items():
+                try:
+                    __import__(import_name)
+                    logger.info(f"{package_name}库已安装 (导入为 {import_name})")
+                except ImportError:
+                    logger.warning(f"{package_name}库未安装，将添加到安装列表")
+                    missing_packages.append(package_name)
             
             # 尝试从requirements.txt读取完整依赖列表
             requirements_path = os.path.join(project_root, "requirements.txt")
@@ -864,14 +892,23 @@ class LauncherApp:
 
             # 检查依赖项
             self.status_var.set(_("launcher.checking_dependencies", "正在检查依赖项..."))
-            required_packages = ["flask", "pandas", "openpyxl", "pillow", "requests"]
+            # 修复：使用正确的导入名称映射
+            required_packages = {
+                "flask": "flask",
+                "pandas": "pandas",
+                "openpyxl": "openpyxl",
+                "pillow": "PIL",  # Pillow包的导入名称是PIL
+                "requests": "requests"
+            }
             missing_packages = []
 
-            for package in required_packages:
+            for package_name, import_name in required_packages.items():
                 try:
-                    __import__(package)
+                    __import__(import_name)
+                    logger.debug(f"依赖检查通过: {package_name} (导入为 {import_name})")
                 except ImportError:
-                    missing_packages.append(package)
+                    logger.warning(f"依赖检查失败: {package_name} (尝试导入 {import_name})")
+                    missing_packages.append(package_name)
             
             if missing_packages:
                 # 提示安装缺失的依赖项
@@ -1218,11 +1255,65 @@ class LauncherApp:
     def start_client(self):
         """
         启动客户端
-        
+
         Returns:
             bool: 是否成功启动
         """
         return self.start_module("client")
+
+    @handle_error
+    def start_developer_tools(self):
+        """
+        启动开发工具
+
+        Returns:
+            bool: 是否成功启动
+        """
+        try:
+            # 检查开发工具是否已经在运行
+            if self.module_status["developer_tools"]["status"] == "running":
+                messagebox.showinfo("提示", "开发工具已经在运行中")
+                return True
+
+            # 更新状态
+            self.status_var.set("正在启动开发工具...")
+            self.module_status["developer_tools"]["status"] = "starting"
+            self.update_module_tree()
+
+            # 获取开发工具脚本路径
+            developer_tools_path = os.path.join(project_root, "developer_tools.py")
+            if not os.path.exists(developer_tools_path):
+                messagebox.showerror("错误", "找不到开发工具文件")
+                self.module_status["developer_tools"]["status"] = "stopped"
+                self.update_module_tree()
+                return False
+
+            # 启动开发工具进程
+            if os.name == 'nt':  # Windows
+                cmd = f'start cmd /k "cd /d {project_root} && python developer_tools.py"'
+                process = subprocess.Popen(cmd, shell=True)
+            else:  # Linux/Mac
+                process = subprocess.Popen([sys.executable, developer_tools_path])
+
+            # 等待一下确保进程启动
+            time.sleep(1)
+
+            # 更新模块状态
+            self.module_status["developer_tools"]["pid"] = process.pid
+            self.module_status["developer_tools"]["status"] = "running"
+
+            self.update_module_tree()
+            self.status_var.set("开发工具已启动")
+            messagebox.showinfo("成功", "开发工具已启动")
+
+            return True
+
+        except Exception as e:
+            logger.error(f"启动开发工具失败: {e}")
+            messagebox.showerror("错误", f"启动开发工具失败: {str(e)}")
+            self.module_status["developer_tools"]["status"] = "stopped"
+            self.update_module_tree()
+            return False
     
     @handle_error
     def start_all_modules(self):
@@ -1246,6 +1337,11 @@ class LauncherApp:
         for module_id in ["grading_center", "exam_management", "client", "user_management"]:
             if not self.start_module(module_id):
                 success = False
+
+        # 启动开发工具（可选）
+        if not self.start_developer_tools():
+            # 开发工具启动失败不影响整体成功状态
+            logger.warning("开发工具启动失败，但不影响系统运行")
         
         return success
     

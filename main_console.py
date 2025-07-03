@@ -1062,7 +1062,54 @@ class MainConsole:
         messagebox.showinfo("提示", "对话上下文管理功能开发中...")
 
     def start_developer_tools(self):
-        messagebox.showinfo("提示", "开发工具功能开发中...")
+        """启动开发工具"""
+        try:
+            # 检查开发工具是否已经在运行
+            if self.modules["developer_tools"]["status"] == "运行中":
+                messagebox.showinfo("提示", "开发工具已经在运行中")
+                return
+
+            # 更新状态
+            self.modules["developer_tools"]["status"] = "启动中"
+            self.update_module_status()
+
+            # 启动开发工具
+            import subprocess
+            import sys
+            import os
+
+            # 获取开发工具脚本路径
+            developer_tools_path = os.path.join(os.path.dirname(__file__), "..", "developer_tools.py")
+            if not os.path.exists(developer_tools_path):
+                developer_tools_path = os.path.join(os.path.dirname(__file__), "developer_tools.py")
+
+            if not os.path.exists(developer_tools_path):
+                messagebox.showerror("错误", "找不到开发工具文件")
+                self.modules["developer_tools"]["status"] = "未启动"
+                self.update_module_status()
+                return
+
+            # 启动开发工具进程
+            if os.name == 'nt':  # Windows
+                cmd = f'start cmd /k "cd /d {os.path.dirname(developer_tools_path)} && python {os.path.basename(developer_tools_path)}"'
+                process = subprocess.Popen(cmd, shell=True)
+            else:  # Linux/Mac
+                process = subprocess.Popen([sys.executable, developer_tools_path])
+
+            # 更新模块状态
+            self.modules["developer_tools"]["process"] = process
+            self.modules["developer_tools"]["pid"] = process.pid
+            self.modules["developer_tools"]["status"] = "运行中"
+            self.modules["developer_tools"]["start_time"] = time.time()
+
+            self.update_module_status()
+            messagebox.showinfo("成功", "开发工具已启动")
+
+        except Exception as e:
+            logger.error(f"启动开发工具失败: {e}")
+            messagebox.showerror("错误", f"启动开发工具失败: {str(e)}")
+            self.modules["developer_tools"]["status"] = "未启动"
+            self.update_module_status()
 
 if __name__ == '__main__':
     app = MainConsole()
