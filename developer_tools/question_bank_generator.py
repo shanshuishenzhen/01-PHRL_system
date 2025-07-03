@@ -2,6 +2,106 @@ import json
 import os
 import random
 import pandas as pd
+import sys
+import sqlite3
+import uuid
+from datetime import datetime
+
+# 添加题库管理模块路径
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'question_bank_web'))
+
+# 尝试导入题库管理模块的数据库模型
+try:
+    from models import QuestionBank, Question
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    DB_INTEGRATION_AVAILABLE = True
+except ImportError:
+    print("警告: 无法导入题库管理模块，将使用文件模式")
+    DB_INTEGRATION_AVAILABLE = False
+
+def get_question_bank_db_session():
+    """获取题库管理模块的数据库会话"""
+    if not DB_INTEGRATION_AVAILABLE:
+        return None
+
+    try:
+        # 题库管理模块的数据库路径
+        db_path = os.path.join(os.path.dirname(__file__), '..', 'question_bank_web', 'local_dev.db')
+        engine = create_engine(f'sqlite:///{db_path}')
+        Session = sessionmaker(bind=engine)
+        return Session()
+    except Exception as e:
+        print(f"连接题库数据库失败: {e}")
+        return None
+
+def save_to_question_bank_db(bank_name, questions):
+    """将题目保存到题库管理模块的数据库"""
+    if not DB_INTEGRATION_AVAILABLE:
+        return False, "数据库集成不可用"
+
+    session = get_question_bank_db_session()
+    if not session:
+        return False, "无法连接到题库数据库"
+
+    try:
+        # 查找或创建题库
+        question_bank = session.query(QuestionBank).filter_by(name=bank_name).first()
+        if not question_bank:
+            question_bank = QuestionBank(name=bank_name)
+            session.add(question_bank)
+            session.flush()  # 获取ID
+        else:
+            # 删除现有题目（如果是替换模式）
+            session.query(Question).filter_by(question_bank_id=question_bank.id).delete()
+
+        # 添加新题目
+        for q in questions:
+            # 处理选项数据结构
+            options = q.get('options', [])
+            option_a = option_b = option_c = option_d = ''
+
+            if isinstance(options, list):
+                # 选项是列表格式 [{"key": "A", "text": "..."}, ...]
+                for opt in options:
+                    if opt.get('key') == 'A':
+                        option_a = opt.get('text', '')
+                    elif opt.get('key') == 'B':
+                        option_b = opt.get('text', '')
+                    elif opt.get('key') == 'C':
+                        option_c = opt.get('text', '')
+                    elif opt.get('key') == 'D':
+                        option_d = opt.get('text', '')
+            elif isinstance(options, dict):
+                # 选项是字典格式 {"A": "...", "B": "..."}
+                option_a = options.get('A', '')
+                option_b = options.get('B', '')
+                option_c = options.get('C', '')
+                option_d = options.get('D', '')
+
+            question = Question(
+                id=q['id'],
+                question_type_code=q['type'],
+                stem=q['stem'],
+                option_a=option_a,
+                option_b=option_b,
+                option_c=option_c,
+                option_d=option_d,
+                correct_answer=q['answer'],
+                difficulty_code='3',  # 默认中等难度
+                question_bank_id=question_bank.id,
+                created_at=datetime.utcnow()
+            )
+            session.add(question)
+
+        session.commit()
+        return True, f"成功保存到题库: {bank_name}"
+
+    except Exception as e:
+        session.rollback()
+        return False, f"保存到数据库失败: {e}"
+    finally:
+        session.close()
 
 def generate_question(q_type, k_code_l3, parallel_seq, question_seq, question_type_name):
     """生成单个虚拟题目的JSON对象。"""
@@ -37,18 +137,28 @@ def generate_question(q_type, k_code_l3, parallel_seq, question_seq, question_ty
         "score": 1 if q_type in ['B', 'C'] else 2
     }
 
-def generate_from_excel(excel_path, output_path):
+def generate_from_excel(excel_path, output_path, append_mode=False):
     """
     从指定的Excel模板文件生成题库，并保存为Excel格式。
+
+    Args:
+        excel_path: Excel模板文件路径
+        output_path: 输出文件路径
+        append_mode: 是否为追加模式，True表示追加到现有题库，False表示覆盖
     """
-    def handle_excel_upload(self, file_path='case_001.xlsx'):
-        """处理新规则模板的上传"""
-        df = pd.read_excel(os.path.join('developer_tools', 'case_001.xlsx'))
+    # 读取Excel文件
+    try:
+        # 使用openpyxl引擎并指定编码处理
+        df = pd.read_excel(excel_path, engine='openpyxl')
+    except Exception as e:
+        raise Exception(f"读取Excel文件失败: {e}")
 
     # 数据预处理：向前填充合并的单元格
     # 注意：pandas读取时，合并单元格只有左上角有值，其他为空。向前填充可以补全这些值。
-    df['1级代码'] = df['1级代码'].ffill()
-    df['2级代码'] = df['2级代码'].ffill()
+    if '1级代码' in df.columns:
+        df['1级代码'] = df['1级代码'].ffill()
+    if '2级代码' in df.columns:
+        df['2级代码'] = df['2级代码'].ffill()
 
     # 识别所有题型列，例如 'B(单选题)'
     question_type_cols = {}
@@ -90,12 +200,26 @@ def generate_from_excel(excel_path, output_path):
     
     # 确保输出目录存在
     output_dir = os.path.dirname(output_path)
-    os.makedirs(output_dir, exist_ok=True)
+    if output_dir:  # 只有当目录不为空时才创建
+        os.makedirs(output_dir, exist_ok=True)
     
+    # 从Excel模板中提取题库名称
+    bank_name = "样例题库"  # 默认名称
+    if '题库名称' in df.columns:
+        # 获取第一个非空的题库名称
+        for idx, row in df.iterrows():
+            if pd.notna(row.get('题库名称', '')) and str(row.get('题库名称', '')).strip():
+                original_name = str(row.get('题库名称', '')).strip()
+                # 如果原名称不包含"样例题库"，则添加后缀
+                if "样例题库" not in original_name:
+                    bank_name = f"{original_name}样例题库"
+                else:
+                    bank_name = original_name
+                break
+
     # 将生成的题目转换为Excel格式
     # 准备数据框架
     data = []
-    bank_name = "样例题库"
     
     for q in all_questions:
         # 处理选项，将选项对象转换为字符串
@@ -129,19 +253,75 @@ def generate_from_excel(excel_path, output_path):
         }
         data.append(row)
     
-    # 创建DataFrame并导出为Excel
-    df_output = pd.DataFrame(data)
-    df_output.to_excel(output_path, index=False)
-    
+    # 处理增量模式
+    if append_mode and os.path.exists(output_path):
+        try:
+            # 读取现有的Excel文件
+            existing_df = pd.read_excel(output_path)
+
+            # 检查是否已存在相同题库名称的题目
+            existing_bank_names = existing_df['题库名称'].unique() if '题库名称' in existing_df.columns else []
+
+            if bank_name in existing_bank_names:
+                # 如果题库名称已存在，过滤掉重复的题库
+                existing_df = existing_df[existing_df['题库名称'] != bank_name]
+                print(f"检测到重复题库名称 '{bank_name}'，将替换现有题库")
+
+            # 合并新旧数据
+            new_df = pd.DataFrame(data)
+            df_output = pd.concat([existing_df, new_df], ignore_index=True)
+
+        except Exception as e:
+            print(f"读取现有文件失败，将创建新文件: {e}")
+            df_output = pd.DataFrame(data)
+    else:
+        # 覆盖模式或文件不存在
+        df_output = pd.DataFrame(data)
+
+    # 导出为Excel，使用openpyxl引擎并处理编码
+    try:
+        df_output.to_excel(output_path, index=False, engine='openpyxl')
+    except UnicodeEncodeError as e:
+        # 如果遇到编码错误，尝试清理数据中的特殊字符
+        print(f"警告: 检测到编码问题，正在清理数据: {e}")
+        for col in df_output.columns:
+            if df_output[col].dtype == 'object':  # 字符串列
+                df_output[col] = df_output[col].astype(str).apply(
+                    lambda x: x.encode('utf-8', errors='ignore').decode('utf-8') if isinstance(x, str) else x
+                )
+        df_output.to_excel(output_path, index=False, engine='openpyxl')
+
+    # 保存到题库管理模块的数据库
+    db_success = False
+    db_message = ""
+    if DB_INTEGRATION_AVAILABLE:
+        db_success, db_message = save_to_question_bank_db(bank_name, all_questions)
+        if db_success:
+            print(f"✅ {db_message}")
+        else:
+            print(f"⚠️ {db_message}")
+
     # 同时保存一份JSON格式作为备份
     json_path = output_path.replace('.xlsx', '.json')
-    with open(json_path, 'w', encoding='utf-8') as f:
-        json.dump({"questions": all_questions}, f, ensure_ascii=False, indent=2)
-    
-    # 返回生成的题目总数
-    total_questions = len(all_questions)
+    backup_data = {
+        "bank_name": bank_name,
+        "questions": all_questions,
+        "generation_time": pd.Timestamp.now().isoformat(),
+        "append_mode": append_mode,
+        "db_saved": db_success,
+        "db_message": db_message
+    }
+    try:
+        with open(json_path, 'w', encoding='utf-8') as f:
+            json.dump(backup_data, f, ensure_ascii=False, indent=2)
+    except UnicodeEncodeError as e:
+        print(f"警告: JSON保存编码问题，使用ASCII模式: {e}")
+        with open(json_path, 'w', encoding='utf-8') as f:
+            json.dump(backup_data, f, ensure_ascii=True, indent=2)
 
-    return total_questions
+    # 返回生成的题目总数、题库名称和数据库保存状态
+    total_questions = len(all_questions)
+    return total_questions, bank_name, db_success
 
 if __name__ == '__main__':
     # 用于直接测试脚本
@@ -150,9 +330,17 @@ if __name__ == '__main__':
     
     if os.path.exists(excel_file):
         try:
-            total_generated = generate_from_excel(excel_file, output_file)
-            print(f"测试生成成功！共 {total_generated} 道题目。")
-            print(f"文件已保存至: {output_file}")
+            result = generate_from_excel(excel_file, output_file)
+            if len(result) == 3:
+                total_generated, bank_name, db_success = result
+                print(f"测试生成成功！题库名称: {bank_name}，共 {total_generated} 道题目。")
+                print(f"文件已保存至: {output_file}")
+                print(f"数据库保存: {'成功' if db_success else '失败'}")
+            else:
+                # 兼容旧版本返回值
+                total_generated, bank_name = result
+                print(f"测试生成成功！题库名称: {bank_name}，共 {total_generated} 道题目。")
+                print(f"文件已保存至: {output_file}")
         except Exception as e:
             print(f"测试生成失败: {e}")
     else:

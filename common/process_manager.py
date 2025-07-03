@@ -82,9 +82,19 @@ def start_module(module_name, module_path, port=None, cwd=None, auto_restart=Fal
 
     # 根据操作系统选择启动方式
     if os.name == 'nt':  # Windows
-        # 在新的命令行窗口中启动模块
-        cmd = f"start cmd /k python \"{module_path}\""
-        process = subprocess.Popen(cmd, shell=True, cwd=cwd)
+        # 静默启动模块，不显示命令行窗口
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startupinfo.wShowWindow = subprocess.SW_HIDE
+
+        process = subprocess.Popen(
+            [sys.executable, module_path],
+            startupinfo=startupinfo,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            cwd=cwd
+        )
     else:  # Linux/Mac
         # 在后台启动模块
         process = subprocess.Popen(

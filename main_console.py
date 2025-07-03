@@ -22,9 +22,16 @@ import logging
 import platform
 import json
 import socket
-import psutil
 import csv
 from datetime import datetime
+
+# 尝试导入psutil，如果失败则提供替代方案
+try:
+    import psutil
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    PSUTIL_AVAILABLE = False
+    print("警告: psutil未安装，系统资源监控功能将被禁用")
 
 # 配置日志
 log_dir = os.path.join(os.path.dirname(__file__), 'logs')
@@ -83,27 +90,82 @@ class MainConsole:
         # 启动状态更新线程
         self.start_status_update()
 
+        # 启动模块状态刷新（30秒后开始，然后每30秒检查一次）
+        self.root.after(30000, self.refresh_module_status)
+
     def create_widgets(self):
         """创建主界面控件"""
-        # 主容器
-        main_container = ttk.Frame(self.root, padding="20")
+        # 创建主画布和滚动条
+        self.canvas = tk.Canvas(self.root, highlightthickness=0)
+        self.scrollbar = ttk.Scrollbar(self.root, orient="vertical", command=self.canvas.yview)
+        self.scrollable_frame = ttk.Frame(self.canvas)
+
+        # 配置滚动
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        )
+
+        # 创建画布窗口
+        self.canvas_window = self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+
+        # 绑定鼠标滚轮事件
+        self.canvas.bind("<MouseWheel>", self._on_mousewheel)
+        self.root.bind("<MouseWheel>", self._on_mousewheel)
+
+        # 绑定画布大小变化事件
+        self.canvas.bind('<Configure>', self._on_canvas_configure)
+
+        # 布局画布和滚动条
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.scrollbar.pack(side="right", fill="y")
+
+        # 主容器（在可滚动框架内）
+        main_container = ttk.Frame(self.scrollable_frame, padding="20")
         main_container.pack(fill=tk.BOTH, expand=True)
-        
+
         # 顶部标题区域
         self.create_header(main_container)
-        
+
         # 主要内容区域
         content_frame = ttk.Frame(main_container)
         content_frame.pack(fill=tk.BOTH, expand=True, pady=(20, 0))
-        
+
         # 左侧：模块按钮区域
         self.create_module_buttons(content_frame)
-        
+
         # 右侧：状态信息区域
         self.create_status_panel(content_frame)
-        
+
         # 底部：系统信息区域
         self.create_footer(main_container)
+
+        # 更新滚动区域
+        self.root.after(100, self._update_scroll_region)
+
+    def _on_mousewheel(self, event):
+        """处理鼠标滚轮事件"""
+        try:
+            self.canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        except Exception as e:
+            logging.error(f"鼠标滚轮事件处理失败: {e}")
+
+    def _on_canvas_configure(self, event):
+        """处理画布大小变化事件"""
+        try:
+            # 更新滚动区域
+            canvas_width = event.width
+            self.canvas.itemconfig(self.canvas_window, width=canvas_width)
+        except Exception as e:
+            logging.error(f"画布配置事件处理失败: {e}")
+
+    def _update_scroll_region(self):
+        """更新滚动区域"""
+        try:
+            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        except Exception as e:
+            logging.error(f"更新滚动区域失败: {e}")
 
     def create_header(self, parent):
         """创建顶部标题区域"""
@@ -177,16 +239,20 @@ class MainConsole:
             { "name": "开发工具", "key": "developer_tools", "command": self.start_developer_tools, "description": "生成测试数据和工具", "icon": "🛠️", "color": "#7f8c8d" }
         ]
         
-        # 创建按钮网格 (调整布局以适应7个按钮)
+        # 配置网格权重以支持响应式布局
+        button_grid.columnconfigure(0, weight=1)
+        button_grid.columnconfigure(1, weight=1)
+
+        # 创建按钮网格 (调整布局以适应8个按钮)
         for i, module in enumerate(modules):
             row = i // 2
             col = i % 2
-            
+
             button_container = ttk.Frame(button_grid, relief="solid", borderwidth=1)
-            
             button_container.grid(row=row, column=col, padx=10, pady=10, sticky="ew")
-                
-            button_container.configure(style="Module.TFrame")
+
+            # 配置按钮容器的列权重
+            button_container.columnconfigure(0, weight=1)
             
             # 按钮
             btn = tk.Button(
@@ -355,7 +421,7 @@ class MainConsole:
             cursor="hand2"
         )
         support_label.pack(side=tk.RIGHT)
-        support_label.bind("<Button-1>", lambda e: webbrowser.open("mailto:support@phrl-exam.com"))
+        support_label.bind("<Button-1>", lambda _: webbrowser.open("mailto:support@phrl-exam.com"))
 
     def start_status_update(self):
         """启动状态更新线程"""
@@ -387,23 +453,36 @@ class MainConsole:
 
     def update_system_resources(self):
         """更新系统资源使用情况"""
+        if not PSUTIL_AVAILABLE:
+            # 如果psutil不可用，显示占位信息
+            if hasattr(self, 'cpu_label'):
+                self.cpu_label.config(text="CPU使用率: 不可用 (需要安装psutil)")
+            if hasattr(self, 'memory_label'):
+                self.memory_label.config(text="内存使用率: 不可用 (需要安装psutil)")
+            if hasattr(self, 'disk_label'):
+                self.disk_label.config(text="磁盘使用率: 不可用 (需要安装psutil)")
+            return
+
         try:
             # CPU使用率
             cpu_percent = psutil.cpu_percent(interval=0.1)
             self.system_resources['cpu_usage'] = cpu_percent
-            self.cpu_label.config(text=f"CPU使用率: {cpu_percent:.1f}%")
-            
+            if hasattr(self, 'cpu_label'):
+                self.cpu_label.config(text=f"CPU使用率: {cpu_percent:.1f}%")
+
             # 内存使用率
             memory = psutil.virtual_memory()
             memory_percent = memory.percent
             self.system_resources['memory_usage'] = memory_percent
-            self.memory_label.config(text=f"内存使用率: {memory_percent:.1f}% ({memory.used // (1024*1024)} MB / {memory.total // (1024*1024)} MB)")
-            
+            if hasattr(self, 'memory_label'):
+                self.memory_label.config(text=f"内存使用率: {memory_percent:.1f}% ({memory.used // (1024*1024)} MB / {memory.total // (1024*1024)} MB)")
+
             # 磁盘使用率
             disk = psutil.disk_usage(os.getcwd())
             disk_percent = disk.percent
             self.system_resources['disk_usage'] = disk_percent
-            self.disk_label.config(text=f"磁盘使用率: {disk_percent:.1f}% ({disk.used // (1024*1024*1024):.1f} GB / {disk.total // (1024*1024*1024):.1f} GB)")
+            if hasattr(self, 'disk_label'):
+                self.disk_label.config(text=f"磁盘使用率: {disk_percent:.1f}% ({disk.used // (1024*1024*1024):.1f} GB / {disk.total // (1024*1024*1024):.1f} GB)")
         except Exception as e:
             logging.error(f"更新系统资源信息失败: {e}")
     
@@ -476,22 +555,104 @@ class MainConsole:
         return True
         
     def check_port_available(self, port):
-        """检查端口是否可用"""
+        """检查端口是否可用（未被占用）"""
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(1)
             result = sock.connect_ex(('127.0.0.1', port))
             sock.close()
-            return result == 0  # 0表示连接成功，端口被占用
+            return result != 0  # 0表示连接成功（端口被占用），非0表示端口可用
         except Exception as e:
             logging.error(f"检查端口 {port} 时出错: {e}")
+            return True  # 出错时假设端口可用
+
+    def check_service_running(self, port):
+        """检查服务是否在指定端口运行"""
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(1)
+            result = sock.connect_ex(('127.0.0.1', port))
+            sock.close()
+            return result == 0  # 0表示连接成功，服务正在运行
+        except Exception as e:
+            logging.error(f"检查服务端口 {port} 时出错: {e}")
             return False
+
+    def check_process_alive(self, process):
+        """检查进程是否存活"""
+        if process is None:
+            return False
+        try:
+            # 检查进程是否仍在运行
+            return process.poll() is None
+        except Exception as e:
+            logging.error(f"检查进程状态时出错: {e}")
+            return False
+
+    def is_module_really_running(self, module_key):
+        """综合检查模块是否真正在运行（进程存活 + 端口监听）"""
+        module_info = self.module_status.get(module_key, {})
+
+        # 检查进程是否存活
+        process = module_info.get("process")
+        if not self.check_process_alive(process):
+            return False
+
+        # 检查端口是否在监听
+        port = module_info.get("port")
+        if port and not self.check_service_running(port):
+            return False
+
+        # 对于阅卷中心，还需要检查后端进程
+        if module_key == "grading_center":
+            backend_process = module_info.get("backend_process")
+            if not self.check_process_alive(backend_process):
+                return False
+
+            # 检查后端端口
+            backend_port = module_info.get("port")  # 后端端口
+            frontend_port = self.config.get("module_ports", {}).get("grading_center_frontend", 5173)
+
+            if not self.check_service_running(backend_port) or not self.check_service_running(frontend_port):
+                return False
+
+        return True
+
+    def refresh_module_status(self):
+        """刷新所有模块的真实状态"""
+        for module_key in self.module_status:
+            if self.module_status[module_key]["status"] == "运行中":
+                # 检查模块是否真正在运行
+                if not self.is_module_really_running(module_key):
+                    # 模块实际已停止，更新状态
+                    logging.warning(f"检测到 {module_key} 模块已停止运行，更新状态")
+                    self.module_status[module_key]["status"] = "未启动"
+                    self.module_status[module_key]["process"] = None
+                    if module_key == "grading_center":
+                        self.module_status[module_key]["backend_process"] = None
+
+        self.update_module_status()
+
+        # 每30秒检查一次
+        self.root.after(30000, self.refresh_module_status)
     
     def start_question_bank(self, auto_restart=False):
         """启动题库管理模块"""
+        # 检查模块是否真正在运行
         if self.module_status["question_bank"]["status"] == "运行中" and not auto_restart:
-            messagebox.showinfo("提示", "题库管理模块已在运行中")
-            return
+            # 进行深度检查，确认进程和服务都在运行
+            if self.is_module_really_running("question_bank"):
+                # 服务确实在运行，直接打开浏览器
+                port = self.module_status["question_bank"]["port"]
+                webbrowser.open(f"http://127.0.0.1:{port}")
+                messagebox.showinfo("提示", "题库管理模块已在运行中")
+                return
+            else:
+                # 状态显示运行中但实际没有运行，重置状态并重新启动
+                logging.warning("题库管理模块状态异常，重新启动")
+                self.module_status["question_bank"]["status"] = "未启动"
+                self.module_status["question_bank"]["process"] = None
+                self.update_module_status()
             
         try:
             # 检查文件路径
@@ -509,31 +670,79 @@ class MainConsole:
             # 启动Flask应用
             def start_flask():
                 try:
-                    # 使用更可靠的启动方式
-                    command = f'start cmd /k "cd /d {os.path.join(os.getcwd(), "question_bank_web")} && {sys.executable} -m flask run"'
-                    process = subprocess.Popen(command, shell=True)
+                    # 设置Flask环境变量
+                    env = os.environ.copy()
+                    env['FLASK_APP'] = 'app.py'
+                    env['FLASK_ENV'] = 'production'
+                    env['FLASK_RUN_HOST'] = '127.0.0.1'
+                    env['FLASK_RUN_PORT'] = '5000'
+                    env['FLASK_SILENT'] = '1'  # 启用静默模式
+
+                    working_directory = os.path.join(os.getcwd(), "question_bank_web")
+
+                    # 使用静默启动方式，隐藏命令行窗口
+                    if os.name == 'nt':  # Windows
+                        # 创建启动信息，隐藏窗口
+                        startupinfo = subprocess.STARTUPINFO()
+                        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                        startupinfo.wShowWindow = subprocess.SW_HIDE
+
+                        # 使用run.py直接启动，添加静默参数
+                        process = subprocess.Popen(
+                            [sys.executable, "run.py", "--silent"],
+                            cwd=working_directory,
+                            env=env,
+                            startupinfo=startupinfo,
+                            creationflags=subprocess.CREATE_NO_WINDOW,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE
+                        )
+                    else:  # Linux/Mac
+                        process = subprocess.Popen(
+                            [sys.executable, "run.py", "--silent"],
+                            cwd=working_directory,
+                            env=env,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL
+                        )
                     
                     self.module_status["question_bank"]["process"] = process
-                    self.module_status["question_bank"]["status"] = "运行中"
+                    self.module_status["question_bank"]["status"] = "启动中"
                     self.module_status["question_bank"]["start_time"] = datetime.now()
                     self.update_module_status()
-                    logging.info("题库管理模块已启动")
-                    
-                    # 等待服务启动
-                    time.sleep(3)
-                    
-                    # 检查端口是否可用
+                    logging.info("题库管理模块启动中...")
+
+                    # 等待服务启动，给Flask应用足够的启动时间
+                    max_wait_time = 15  # 最大等待15秒
+                    wait_interval = 1   # 每秒检查一次
                     port = self.module_status["question_bank"]["port"]
-                    port_available = self.check_port_available(port)
-                    
-                    if port_available:
-                        # 打开浏览器
-                        webbrowser.open(f"http://127.0.0.1:{port}")
-                        logging.info(f"已打开题库管理Web界面: http://127.0.0.1:{port}")
-                    else:
-                        logging.warning(f"端口 {port} 不可用，无法打开Web界面")
-                        if not auto_restart:
-                            messagebox.showwarning("端口问题", f"端口 {port} 不可用，请手动访问题库管理Web界面")
+
+                    for i in range(max_wait_time):
+                        time.sleep(wait_interval)
+                        service_running = self.check_service_running(port)
+
+                        if service_running:
+                            # 服务启动成功
+                            self.module_status["question_bank"]["status"] = "运行中"
+                            self.update_module_status()
+                            logging.info(f"题库管理服务启动成功，耗时 {i+1} 秒")
+
+                            # 打开浏览器
+                            webbrowser.open(f"http://127.0.0.1:{port}")
+                            logging.info(f"已打开题库管理Web界面: http://127.0.0.1:{port}")
+
+                            # 只在非自动重启时显示简洁提示
+                            if not auto_restart:
+                                # 使用状态栏显示成功信息，避免弹窗
+                                pass
+                            return
+
+                    # 超时未启动成功
+                    self.module_status["question_bank"]["status"] = "启动失败"
+                    self.update_module_status()
+                    logging.warning(f"题库管理服务启动超时（{max_wait_time}秒）")
+                    if not auto_restart:
+                        messagebox.showwarning("启动超时", f"题库管理服务启动超时，请检查日志或手动访问: http://127.0.0.1:{port}")
                 except Exception as e:
                     error_msg = f"启动题库管理模块时发生错误：{e}"
                     logging.error(error_msg)
@@ -543,8 +752,7 @@ class MainConsole:
                         messagebox.showerror("启动失败", error_msg)
             
             threading.Thread(target=start_flask, daemon=True).start()
-            if not auto_restart:
-                messagebox.showinfo("启动中", "题库管理模块正在启动，请稍候...")
+            # 移除启动中的弹窗，避免重复弹窗
 
         except Exception as e:
             error_msg = f"启动题库管理失败: {e}"
@@ -582,9 +790,22 @@ class MainConsole:
 
     def start_grading_center(self, auto_restart=False):
         """启动阅卷中心模块"""
+        # 检查模块是否真正在运行
         if self.module_status["grading_center"]["status"] == "运行中" and not auto_restart:
-            messagebox.showinfo("提示", "阅卷中心模块已在运行中")
-            return
+            # 进行深度检查，确认进程和服务都在运行
+            if self.is_module_really_running("grading_center"):
+                # 服务确实在运行，直接打开浏览器
+                frontend_port = self.config.get("module_ports", {}).get("grading_center_frontend", 5173)
+                webbrowser.open(f"http://localhost:{frontend_port}")
+                messagebox.showinfo("提示", "阅卷中心模块已在运行中")
+                return
+            else:
+                # 状态显示运行中但实际没有运行，重置状态并重新启动
+                logging.warning("阅卷中心模块状态异常，重新启动")
+                self.module_status["grading_center"]["status"] = "未启动"
+                self.module_status["grading_center"]["process"] = None
+                self.module_status["grading_center"]["backend_process"] = None
+                self.update_module_status()
             
         try:
             # 检查必要文件
@@ -606,55 +827,117 @@ class MainConsole:
                     backend_dir = os.path.join(os.path.dirname(__file__), 'grading_center', 'server')
                     backend_app_path = os.path.join(backend_dir, 'app.js')
                     logging.info(f"启动阅卷中心后端，路径: {backend_app_path}")
-                    # 使用shell=True确保在Windows环境下正确执行node命令
-                    backend_process = subprocess.Popen(
-                        f'node "{backend_app_path}"',
-                        shell=True,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE
-                    )
+
+                    # 静默启动后端服务
+                    if os.name == 'nt':  # Windows
+                        startupinfo = subprocess.STARTUPINFO()
+                        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                        startupinfo.wShowWindow = subprocess.SW_HIDE
+
+                        backend_process = subprocess.Popen(
+                            f'node "{backend_app_path}"',
+                            shell=True,
+                            startupinfo=startupinfo,
+                            creationflags=subprocess.CREATE_NO_WINDOW,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE
+                        )
+                    else:  # Linux/Mac
+                        backend_process = subprocess.Popen(
+                            ['node', backend_app_path],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL
+                        )
                     logging.info("阅卷中心后端服务已启动")
-                    
+
                     # 启动Vue前端
                     frontend_dir = os.path.join(os.path.dirname(__file__), 'grading_center', 'client')
                     logging.info(f"启动阅卷中心前端，路径: {frontend_dir}")
-                    # 使用PowerShell启动npm命令，并添加--host参数以允许外部访问
-                    frontend_process = subprocess.Popen(
-                        ['powershell', '-Command', f'cd "{frontend_dir}"; npm run dev -- --host'],
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE
-                    )
+
+                    # 静默启动前端服务
+                    if os.name == 'nt':  # Windows
+                        startupinfo = subprocess.STARTUPINFO()
+                        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                        startupinfo.wShowWindow = subprocess.SW_HIDE
+
+                        frontend_process = subprocess.Popen(
+                            ['npm', 'run', 'dev', '--', '--port', '5173', '--host'],
+                            cwd=frontend_dir,
+                            startupinfo=startupinfo,
+                            creationflags=subprocess.CREATE_NO_WINDOW,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE
+                        )
+                    else:  # Linux/Mac
+                        frontend_process = subprocess.Popen(
+                            ['npm', 'run', 'dev', '--', '--port', '5173', '--host'],
+                            cwd=frontend_dir,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL
+                        )
                     logging.info("阅卷中心前端服务已启动")
                     
-                    # 保存进程引用
+                    # 保存进程引用，但状态仍为启动中
                     self.module_status["grading_center"]["process"] = frontend_process
                     self.module_status["grading_center"]["backend_process"] = backend_process
-                    self.module_status["grading_center"]["status"] = "运行中"
                     self.module_status["grading_center"]["start_time"] = datetime.now()
-                    self.update_module_status()
+                    # 注意：状态在服务确认启动后才设置为"运行中"
                     
-                    # 等待服务启动
-                    time.sleep(5)
-                    
-                    # 检查后端端口是否可用
+                    # 等待服务启动，给Node.js和Vue足够的启动时间
+                    max_wait_time = 20  # 最大等待20秒
+                    wait_interval = 2   # 每2秒检查一次
                     backend_port = self.module_status["grading_center"]["port"]
-                    backend_available = self.check_port_available(backend_port)
-                    
-                    # 检查前端端口是否可用
                     frontend_port = self.config.get("module_ports", {}).get("grading_center_frontend", 5173)
-                    frontend_available = self.check_port_available(frontend_port)
-                    
-                    if backend_available and frontend_available:
-                        # 打开浏览器访问前端
-                        webbrowser.open(f"http://localhost:{frontend_port}")
-                        logging.info(f"已打开阅卷中心Web界面: http://localhost:{frontend_port}")
-                    else:
-                        if not backend_available:
-                            logging.warning(f"后端端口 {backend_port} 不可用，无法打开Web界面")
-                        if not frontend_available:
-                            logging.warning(f"前端端口 {frontend_port} 不可用，无法打开Web界面")
-                        if not auto_restart:
-                            messagebox.showwarning("端口问题", f"阅卷中心服务端口不可用，请手动访问阅卷中心Web界面: http://localhost:{frontend_port}")
+
+                    backend_running = False
+                    frontend_running = False
+
+                    for i in range(max_wait_time // wait_interval):
+                        time.sleep(wait_interval)
+
+                        # 检查后端服务是否启动
+                        if not backend_running:
+                            backend_running = self.check_service_running(backend_port)
+                            if backend_running:
+                                logging.info(f"阅卷中心后端服务启动成功，端口: {backend_port}")
+
+                        # 检查前端服务是否启动
+                        if not frontend_running:
+                            frontend_running = self.check_service_running(frontend_port)
+                            if frontend_running:
+                                logging.info(f"阅卷中心前端服务启动成功，端口: {frontend_port}")
+
+                        # 如果两个服务都启动成功
+                        if backend_running and frontend_running:
+                            # 设置状态为运行中
+                            self.module_status["grading_center"]["status"] = "运行中"
+                            self.update_module_status()
+
+                            # 打开浏览器访问前端
+                            webbrowser.open(f"http://localhost:{frontend_port}")
+                            logging.info(f"已打开阅卷中心Web界面: http://localhost:{frontend_port}")
+
+                            # 移除成功弹窗，避免干扰用户体验
+                            if not auto_restart:
+                                pass
+                            return
+
+                    # 超时处理
+                    self.module_status["grading_center"]["status"] = "启动失败"
+                    self.update_module_status()
+
+                    error_details = []
+                    if not backend_running:
+                        error_details.append(f"后端服务未在端口 {backend_port} 启动")
+                    if not frontend_running:
+                        error_details.append(f"前端服务未在端口 {frontend_port} 启动")
+
+                    error_msg = f"阅卷中心启动超时（{max_wait_time}秒）：" + "；".join(error_details)
+                    logging.warning(error_msg)
+
+                    # 简化超时提示，避免弹窗干扰
+                    if not auto_restart:
+                        logging.warning(f"阅卷中心启动超时，请手动访问: http://localhost:{frontend_port}")
                 except Exception as e:
                     error_msg = f"启动阅卷中心模块时发生错误：{e}"
                     logging.error(error_msg)
@@ -664,9 +947,7 @@ class MainConsole:
                         messagebox.showerror("启动失败", error_msg)
             
             threading.Thread(target=start_grading_center, daemon=True).start()
-            if not auto_restart:
-                frontend_port = self.config.get("module_ports", {}).get("grading_center_frontend", 5173)
-                messagebox.showinfo("启动中", f"阅卷中心模块正在启动，请稍候...\n\n如果浏览器未自动打开，请手动访问:\nhttp://localhost:{frontend_port}")
+            # 移除启动中弹窗，避免干扰用户体验
 
         except Exception as e:
             error_msg = f"启动阅卷中心失败: {e}"
@@ -765,7 +1046,7 @@ class MainConsole:
             clear_button.pack(side=tk.LEFT, padx=5)
             
             # 绑定回车键触发搜索
-            search_entry.bind("<Return>", lambda event: self.search_exams(tree, search_var.get(), exams_path, exam_statuses, exam_types, status_label))
+            search_entry.bind("<Return>", lambda _: self.search_exams(tree, search_var.get(), exams_path, exam_statuses, exam_types, status_label))
             
             # 添加自动刷新选项
             auto_refresh_var = tk.BooleanVar(value=True)
@@ -821,7 +1102,7 @@ class MainConsole:
             tree.pack(fill=tk.BOTH, expand=True)
             
             # 绑定双击事件
-            tree.bind("<Double-1>", lambda event: self.show_exam_details(tree, exams_path))
+            tree.bind("<Double-1>", lambda _: self.show_exam_details(tree, exams_path))
             
             # 创建右键菜单
             context_menu = tk.Menu(tree, tearoff=0)
@@ -1059,56 +1340,89 @@ class MainConsole:
         messagebox.showinfo("关于系统", "PH&RL 在线考试系统 v1.0.0\n\n© 2024 PH&RL 在线考试系统")
 
     def start_conversation_manager(self):
-        messagebox.showinfo("提示", "对话上下文管理功能开发中...")
+        """启动对话记录管理"""
+        try:
+            # 导入对话记录UI模块
+            import sys
+            import os
+            sys.path.append(os.path.join(os.path.dirname(__file__), 'common'))
+            from conversation_ui import ConversationUI
+
+            # 创建对话记录管理窗口
+            conversation_window = ConversationUI(parent=self.root)
+
+            # 更新模块状态
+            self.module_status["conversation"]["status"] = "运行中"
+            self.module_status["conversation"]["start_time"] = datetime.now()
+            self.update_module_status()
+
+            logging.info("对话记录管理已启动")
+
+        except ImportError as e:
+            error_msg = f"对话记录管理模块导入失败: {e}"
+            logging.error(error_msg)
+            messagebox.showerror("导入错误", error_msg)
+        except Exception as e:
+            error_msg = f"启动对话记录管理失败: {e}"
+            logging.error(error_msg)
+            messagebox.showerror("启动失败", error_msg)
 
     def start_developer_tools(self):
         """启动开发工具"""
         try:
             # 检查开发工具是否已经在运行
-            if self.modules["developer_tools"]["status"] == "运行中":
+            if self.module_status["developer_tools"]["status"] == "运行中":
                 messagebox.showinfo("提示", "开发工具已经在运行中")
                 return
 
             # 更新状态
-            self.modules["developer_tools"]["status"] = "启动中"
+            self.module_status["developer_tools"]["status"] = "启动中"
             self.update_module_status()
 
-            # 启动开发工具
-            import subprocess
-            import sys
-            import os
-
             # 获取开发工具脚本路径
-            developer_tools_path = os.path.join(os.path.dirname(__file__), "..", "developer_tools.py")
+            developer_tools_path = os.path.join(os.path.dirname(__file__), "developer_tools.py")
             if not os.path.exists(developer_tools_path):
-                developer_tools_path = os.path.join(os.path.dirname(__file__), "developer_tools.py")
+                developer_tools_path = os.path.join(os.path.dirname(__file__), "..", "developer_tools.py")
 
             if not os.path.exists(developer_tools_path):
                 messagebox.showerror("错误", "找不到开发工具文件")
-                self.modules["developer_tools"]["status"] = "未启动"
+                self.module_status["developer_tools"]["status"] = "未启动"
                 self.update_module_status()
                 return
 
-            # 启动开发工具进程
+            # 静默启动开发工具进程
             if os.name == 'nt':  # Windows
-                cmd = f'start cmd /k "cd /d {os.path.dirname(developer_tools_path)} && python {os.path.basename(developer_tools_path)}"'
-                process = subprocess.Popen(cmd, shell=True)
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                startupinfo.wShowWindow = subprocess.SW_HIDE
+
+                process = subprocess.Popen(
+                    [sys.executable, developer_tools_path],
+                    startupinfo=startupinfo,
+                    creationflags=subprocess.CREATE_NO_WINDOW,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                )
             else:  # Linux/Mac
-                process = subprocess.Popen([sys.executable, developer_tools_path])
+                process = subprocess.Popen(
+                    [sys.executable, developer_tools_path],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
 
             # 更新模块状态
-            self.modules["developer_tools"]["process"] = process
-            self.modules["developer_tools"]["pid"] = process.pid
-            self.modules["developer_tools"]["status"] = "运行中"
-            self.modules["developer_tools"]["start_time"] = time.time()
+            self.module_status["developer_tools"]["process"] = process
+            self.module_status["developer_tools"]["pid"] = process.pid
+            self.module_status["developer_tools"]["status"] = "运行中"
+            self.module_status["developer_tools"]["start_time"] = datetime.now()
 
             self.update_module_status()
-            messagebox.showinfo("成功", "开发工具已启动")
+            # 移除弹窗，开发工具已正常启动
 
         except Exception as e:
-            logger.error(f"启动开发工具失败: {e}")
+            logging.error(f"启动开发工具失败: {e}")
             messagebox.showerror("错误", f"启动开发工具失败: {str(e)}")
-            self.modules["developer_tools"]["status"] = "未启动"
+            self.module_status["developer_tools"]["status"] = "未启动"
             self.update_module_status()
 
 if __name__ == '__main__':

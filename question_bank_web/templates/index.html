@@ -151,14 +151,22 @@
     }
 
     function populateTypeFilter() {
-        const types = {
-            "B": "单选题", "G": "多选题", "C": "判断题", "T": "填空题",
-            "D": "简答题", "U": "计算题", "W": "论述题", "E": "案例分析题", "F": "组合题"
-        };
-        const $filter = $('#type-filter');
-        for (const [code, name] of Object.entries(types)) {
-            $filter.append(`<option value="${code}">${name}</option>`);
-        }
+        $.get('/api/question-types', function(data) {
+            const $filter = $('#type-filter');
+            data.forEach(function(type) {
+                $filter.append(`<option value="${type.code}">${type.name}</option>`);
+            });
+        }).fail(function() {
+            // 如果API失败，使用默认的题型列表
+            const types = {
+                "B": "单选题", "G": "多选题", "C": "判断题", "T": "填空题",
+                "D": "简答题", "U": "计算题", "W": "论述题", "E": "案例分析题", "F": "综合题"
+            };
+            const $filter = $('#type-filter');
+            for (const [code, name] of Object.entries(types)) {
+                $filter.append(`<option value="${code}">${name}</option>`);
+            }
+        });
     }
     
     $(function() {
@@ -205,6 +213,16 @@
         
         // Type filter change handler
         $('#type-filter').on('change', function() {
+            $table.bootstrapTable('refresh');
+        });
+
+        // Reset filter handler
+        $('#reset-filter').on('click', function() {
+            $('#type-filter').val('');
+            $('#search-input').val('');
+            $('#knowledge-tree-container .nav-link').removeClass('active');
+            activeFilters.level = 'all';
+            activeFilters.code = '';
             $table.bootstrapTable('refresh');
         });
     });

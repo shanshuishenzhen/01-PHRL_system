@@ -53,8 +53,8 @@ async function initializeUsers() {
 
 // 只在直接运行此文件时启动服务器
 if (require.main === module) {
-  // 同步数据库模型
-  models.sequelize.sync({ alter: true })
+  // 同步数据库模型（仅在表不存在时创建，不修改现有表结构）
+  models.sequelize.sync({ alter: false })
     .then(async () => {
       console.log('✅ Database synchronized successfully.');
       

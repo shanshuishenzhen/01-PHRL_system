@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template_string, redirect, url_for, flash, jsonify, send_file, send_from_directory
+from flask import Flask, request, render_template_string, render_template, redirect, url_for, flash, jsonify, send_file, send_from_directory
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, joinedload
 from werkzeug.utils import secure_filename
@@ -36,11 +36,11 @@ DATABASE_URL = os.environ.get('DATABASE_URL', 'sqlite:///local_dev.db')
 try:
     engine = create_engine(DATABASE_URL)
     with engine.connect() as connection:
-        print("✅ Database connection successful")
+        print("Database connection successful")
     Base.metadata.create_all(engine)
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 except Exception as e:
-    print(f"❌ Database connection failed: {e}")
+    print(f"Database connection failed: {e}")
     raise
 
 # 文件上传白名单
@@ -89,57 +89,7 @@ def close_db(db):
     if db:
         db.close()
 
-# API路由
-@app.route('/api/questions', methods=['GET'])
-def api_get_questions():
-    """获取所有问题的API"""
-    db = get_db()
-    try:
-        # 支持分页
-        page = request.args.get('page', 1, type=int)
-        per_page = request.args.get('per_page', 20, type=int)
-        
-        # 支持按题库ID筛选
-        question_bank_id = request.args.get('question_bank_id', type=int)
-        
-        # 支持按题目类型筛选
-        question_type = request.args.get('question_type')
-        
-        # 构建查询
-        query = db.query(Question)
-        
-        # 应用筛选条件
-        if question_bank_id:
-            query = query.filter(Question.question_bank_id == question_bank_id)
-        
-        if question_type:
-            query = query.filter(Question.question_type_code == question_type)
-        
-        # 计算总数
-        total = query.count()
-        
-        # 应用分页
-        questions = query.limit(per_page).offset((page - 1) * per_page).all()
-        
-        return jsonify({
-            'status': 'success',
-            'data': {
-                'questions': [q.to_dict() for q in questions],
-                'pagination': {
-                    'page': page,
-                    'per_page': per_page,
-                    'total': total,
-                    'pages': (total + per_page - 1) // per_page
-                }
-            }
-        })
-    except Exception as e:
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
-    finally:
-        close_db(db)
+# API路由 - 删除重复的API端点，使用下面的Bootstrap Table兼容版本
 
 @app.route('/api/questions/<int:question_id>', methods=['GET'])
 def api_get_question(question_id):
@@ -543,6 +493,7 @@ index_template = """
             <a href="{{ url_for('download_template') }}" class="btn">📋 下载题库模板</a>
             <a href="{{ url_for('index') }}" class="btn">🔄 刷新页面</a>
             <a href="{{ url_for('handle_export_excel') }}" class="btn btn-success">📤 导出题库</a>
+            <a href="/browse" class="btn btn-warning">🔍 高级浏览</a>
             <a href="/quick-generate" class="btn btn-primary">⚡ 快速生成</a>
             <a href="/generate-paper" class="btn btn-warning">🎯 自定义组题</a>
             <a href="/upload-paper-rule" class="btn btn-danger">🗂️ 上传组题规则</a>
@@ -626,7 +577,76 @@ index_template = """
             <p>数据库中还没有任何题目，请通过"导入"按钮添加。</p>
         </div>
     {% endif %}
-        
+
+    <!-- 分页控件 -->
+    {% if total_pages > 1 %}
+    <div class="pagination-container">
+        <div class="pagination-info">
+            显示第 {{ (current_page-1) * per_page + 1 }} - {{ [current_page * per_page, total_questions] | min }} 条，共 {{ total_questions }} 条记录
+        </div>
+
+        <div class="pagination-controls">
+            <div class="per-page-selector">
+                <label for="per-page">每页显示：</label>
+                <select id="per-page" onchange="changePerPage(this.value)">
+                    <option value="15" {% if per_page == 15 %}selected{% endif %}>15</option>
+                    <option value="30" {% if per_page == 30 %}selected{% endif %}>30</option>
+                    <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
+                    <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+                </select>
+            </div>
+
+            <div class="pagination-buttons">
+                <!-- 首页 -->
+                {% if current_page > 1 %}
+                <a href="?page=1&per_page={{ per_page }}" class="btn btn-outline-primary">首页</a>
+                {% endif %}
+
+                <!-- 上一页 -->
+                {% if current_page > 1 %}
+                <a href="?page={{ current_page - 1 }}&per_page={{ per_page }}" class="btn btn-outline-primary">上一页</a>
+                {% endif %}
+
+                <!-- 页码 -->
+                {% set start_page = [1, current_page - 2] | max %}
+                {% set end_page = [total_pages, current_page + 2] | min %}
+
+                {% if start_page > 1 %}
+                <a href="?page=1&per_page={{ per_page }}" class="btn btn-outline-secondary">1</a>
+                {% if start_page > 2 %}
+                <span class="pagination-ellipsis">...</span>
+                {% endif %}
+                {% endif %}
+
+                {% for page_num in range(start_page, end_page + 1) %}
+                {% if page_num == current_page %}
+                <span class="btn btn-primary">{{ page_num }}</span>
+                {% else %}
+                <a href="?page={{ page_num }}&per_page={{ per_page }}" class="btn btn-outline-secondary">{{ page_num }}</a>
+                {% endif %}
+                {% endfor %}
+
+                {% if end_page < total_pages %}
+                {% if end_page < total_pages - 1 %}
+                <span class="pagination-ellipsis">...</span>
+                {% endif %}
+                <a href="?page={{ total_pages }}&per_page={{ per_page }}" class="btn btn-outline-secondary">{{ total_pages }}</a>
+                {% endif %}
+
+                <!-- 下一页 -->
+                {% if current_page < total_pages %}
+                <a href="?page={{ current_page + 1 }}&per_page={{ per_page }}" class="btn btn-outline-primary">下一页</a>
+                {% endif %}
+
+                <!-- 末页 -->
+                {% if current_page < total_pages %}
+                <a href="?page={{ total_pages }}&per_page={{ per_page }}" class="btn btn-outline-primary">末页</a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- 分页功能 -->
     <script>
         function changePerPage(value) {
@@ -859,11 +879,23 @@ def api_questions():
         
         # 应用其他筛选条件
         if q_type:
-            query = query.filter(Question.type == q_type)
-            
+            query = query.filter(Question.question_type_code == q_type)
+
         if search_term:
             search_term = f"%{search_term}%"
             query = query.filter(Question.stem.like(search_term) | Question.id.like(search_term))
+
+        # 支持知识点筛选
+        knowledge_point_l1 = request.args.get('knowledge_point_l1')
+        knowledge_point_l2 = request.args.get('knowledge_point_l2')
+        knowledge_point_l3 = request.args.get('knowledge_point_l3')
+
+        if knowledge_point_l3:
+            query = query.filter(Question.id.like(f"%{knowledge_point_l3}%"))
+        elif knowledge_point_l2:
+            query = query.filter(Question.id.like(f"%{knowledge_point_l2}%"))
+        elif knowledge_point_l1:
+            query = query.filter(Question.id.like(f"%{knowledge_point_l1}%"))
         
         # 应用排序
         if sort_by:
@@ -882,12 +914,108 @@ def api_questions():
         # 应用分页
         questions = query.offset(offset).limit(limit).all()
         
-        # 转换为JSON格式
+        # 转换为Bootstrap Table兼容的JSON格式
+        questions_data = []
+        for q in questions:
+            q_dict = q.to_dict()
+            # 添加题型名称映射
+            type_names = {
+                'B': '单选题',
+                'G': '多选题',
+                'C': '判断题',
+                'T': '填空题',
+                'D': '简答题',
+                'U': '计算题',
+                'W': '论述题',
+                'E': '案例分析题',
+                'F': '综合题'
+            }
+            q_dict['type_name'] = type_names.get(q.question_type_code, q.question_type_code)
+
+            # 添加知识点信息（从ID中提取）
+            if q.id and '-' in q.id:
+                parts = q.id.split('-')
+                if len(parts) >= 3:
+                    q_dict['knowledge_point_l1'] = parts[1] if len(parts) > 1 else ''
+                    q_dict['knowledge_point_l2'] = f"{parts[1]}-{parts[2]}" if len(parts) > 2 else ''
+                    q_dict['knowledge_point_l3'] = f"{parts[1]}-{parts[2]}-{parts[3]}" if len(parts) > 3 else ''
+
+            questions_data.append(q_dict)
+
         result = {
             'total': total,
-            'questions': [q.to_dict() for q in questions]
+            'rows': questions_data
         }
-        
+
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        close_db(db_session)
+
+@app.route('/api/knowledge-tree')
+def api_knowledge_tree():
+    """API 端点：返回知识点树结构"""
+    db_session = None
+    try:
+        db_session = get_db()
+
+        # 获取所有题目的ID，从中提取知识点结构
+        questions = db_session.query(Question.id).all()
+
+        tree = {}
+        for question in questions:
+            if question.id and '-' in question.id:
+                parts = question.id.split('-')
+                if len(parts) >= 4:  # 至少要有 B-A-01-001 这样的格式
+                    l1 = parts[1]
+                    l2 = f"{parts[1]}-{parts[2]}"
+                    l3 = f"{parts[1]}-{parts[2]}-{parts[3]}"
+
+                    if l1 not in tree:
+                        tree[l1] = {}
+                    if l2 not in tree[l1]:
+                        tree[l1][l2] = []
+                    if l3 not in tree[l1][l2]:
+                        tree[l1][l2].append(l3)
+
+        return jsonify(tree)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        close_db(db_session)
+
+@app.route('/api/question-types')
+def api_question_types():
+    """API 端点：返回所有题型"""
+    db_session = None
+    try:
+        db_session = get_db()
+
+        # 获取所有不同的题型
+        types = db_session.query(Question.question_type_code).distinct().all()
+
+        type_names = {
+            'B': '单选题',
+            'G': '多选题',
+            'C': '判断题',
+            'T': '填空题',
+            'D': '简答题',
+            'U': '计算题',
+            'W': '论述题',
+            'E': '案例分析题',
+            'F': '综合题'
+        }
+
+        result = []
+        for type_row in types:
+            type_code = type_row[0]
+            if type_code:
+                result.append({
+                    'code': type_code,
+                    'name': type_names.get(type_code, type_code)
+                })
+
         return jsonify(result)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -913,29 +1041,52 @@ def api_question_detail(question_id):
 
 @app.route('/')
 def index():
-    """主页，显示题库统计和题目列表"""
+    """主页，显示题库统计和题目列表（支持分页）"""
     db = get_db()
     try:
+        # 获取分页参数
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 15))
+
+        # 确保参数有效
+        if page < 1:
+            page = 1
+        if per_page < 1 or per_page > 100:
+            per_page = 15
+
+        # 获取统计信息
         total_questions = db.query(Question).count()
         total_papers = db.query(Paper).count()
         total_banks = db.query(QuestionBank).count()
-        
-        # 获取最新的10道题用于预览
-        recent_questions = db.query(Question).order_by(Question.id.desc()).limit(10).all()
-        
+
+        # 计算分页信息
+        total_pages = (total_questions + per_page - 1) // per_page if total_questions > 0 else 1
+        offset = (page - 1) * per_page
+
+        # 获取当前页的题目
+        questions = db.query(Question).order_by(Question.id.desc()).offset(offset).limit(per_page).all()
+
+        # 获取题库列表用于显示
+        banks = db.query(QuestionBank).all()
+
         return render_template_string(
-            index_template, 
+            index_template,
             total_questions=total_questions,
             total_papers=total_papers,
             total_banks=total_banks,
-            questions=recent_questions,
-            # 添加虚拟分页变量以修复模板错误
-            current_page=1,
-            total_pages=1,
-            per_page=10
+            banks=banks,
+            questions=questions,
+            current_page=page,
+            total_pages=total_pages,
+            per_page=per_page
         )
     finally:
         close_db(db)
+
+@app.route('/browse')
+def browse():
+    """Bootstrap Table浏览页面"""
+    return render_template('index.html')
 
 @app.route('/import-json', methods=['GET'])
 def handle_import_json():

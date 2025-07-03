@@ -15,8 +15,8 @@ if (dbConfig.dialect === 'sqlite') {
       acquire: dbConfig.pool.acquire,
       idle: dbConfig.pool.idle
     },
-    // 在控制台显示SQL查询，方便调试
-    logging: console.log
+    // 禁用SQL查询日志以提高性能
+    logging: false
   });
 } else {
   sequelize = new Sequelize(
@@ -33,8 +33,8 @@ if (dbConfig.dialect === 'sqlite') {
         acquire: dbConfig.pool.acquire,
         idle: dbConfig.pool.idle
       },
-      // 在控制台显示SQL查询，方便调试
-      logging: console.log
+      // 禁用SQL查询日志以提高性能
+      logging: false
     }
   );
 }

@@ -255,16 +255,124 @@ def get_published_exams_for_student(student_id):
         return []
 
 
+def get_all_active_exams():
+    """
+    获取所有进行中的考试（管理员用）
+    """
+    try:
+        all_exams = []
+
+        # 1. 从考试发布模块获取已发布的考试
+        published_exams_file = get_absolute_path('exam_management/published_exams.json')
+        if os.path.exists(published_exams_file):
+            try:
+                with open(published_exams_file, 'r', encoding='utf-8') as f:
+                    published_data = json.load(f)
+
+                if isinstance(published_data, dict) and "exams" in published_data:
+                    published_exams = published_data["exams"]
+                elif isinstance(published_data, list):
+                    published_exams = published_data
+                else:
+                    published_exams = []
+
+                for exam in published_exams:
+                    if exam.get('status') == 'published':
+                        all_exams.append({
+                            "id": exam.get("id"),
+                            "name": exam.get("name"),
+                            "status": "published",
+                            "description": exam.get("description", ""),
+                            "time_limit": exam.get("time_limit", 60),
+                            "total_score": exam.get("total_score", 100),
+                            "exam_type": "published"
+                        })
+
+                print(f"从已发布考试获取到 {len(all_exams)} 个考试")
+            except Exception as e:
+                print(f"读取已发布考试文件失败: {e}")
+
+        # 2. 从考试管理模块获取所有考试
+        exams_file = get_absolute_path('exam_management/exams.json')
+        if os.path.exists(exams_file):
+            try:
+                with open(exams_file, 'r', encoding='utf-8') as f:
+                    exams_data = json.load(f)
+
+                if isinstance(exams_data, dict) and "exams" in exams_data:
+                    exams = exams_data["exams"]
+                elif isinstance(exams_data, list):
+                    exams = exams_data
+                else:
+                    exams = []
+
+                for exam in exams:
+                    # 避免重复添加已发布的考试
+                    exam_id = exam.get("id")
+                    if not any(e.get("id") == exam_id for e in all_exams):
+                        all_exams.append({
+                            "id": exam_id,
+                            "name": exam.get("name"),
+                            "status": exam.get("status", "draft"),
+                            "description": exam.get("description", ""),
+                            "time_limit": exam.get("time_limit", 60),
+                            "total_score": exam.get("total_score", 100),
+                            "exam_type": "managed"
+                        })
+
+                print(f"总共获取到 {len(all_exams)} 个考试")
+            except Exception as e:
+                print(f"读取考试管理文件失败: {e}")
+
+        # 3. 从客户端同步的考试列表获取
+        client_exams_file = get_absolute_path('client/available_exams.json')
+        if os.path.exists(client_exams_file):
+            try:
+                with open(client_exams_file, 'r', encoding='utf-8') as f:
+                    available_exams = json.load(f)
+
+                for exam in available_exams:
+                    exam_id = exam.get("exam_id")
+                    if not any(e.get("id") == exam_id for e in all_exams):
+                        all_exams.append({
+                            "id": exam_id,
+                            "name": exam.get("title"),
+                            "status": exam.get("status", "available"),
+                            "description": exam.get("description", ""),
+                            "time_limit": exam.get("time_limit", 60),
+                            "total_score": exam.get("total_score", 100),
+                            "exam_type": "available"
+                        })
+
+                print(f"最终获取到 {len(all_exams)} 个考试")
+            except Exception as e:
+                print(f"读取客户端考试列表失败: {e}")
+
+        return all_exams
+
+    except Exception as e:
+        print(f"获取所有考试失败: {e}")
+        return []
+
+
 def get_exams_for_student(student_id, user_info=None):
     """
-    获取学生可参加的考试列表
-    优先从考试发布模块获取，然后从客户端同步的考试列表获取
+    获取用户可参加的考试列表
+    - 管理员/考评员：显示所有进行中的考试
+    - 考生：只显示分配给他们的考试
     """
     try:
         # 使用用户信息进行日志记录
         user_name = user_info.get('username', 'unknown') if user_info else 'unknown'
-        print(f"正在为学生 {student_id} (用户: {user_name}) 获取考试列表...")
+        user_role = user_info.get('role', 'student') if user_info else 'student'
+        print(f"正在为用户 {student_id} (用户: {user_name}, 角色: {user_role}) 获取考试列表...")
 
+        # 管理员、考评员、超级用户可以查看所有进行中的考试
+        if user_role in ['admin', 'supervisor', 'evaluator', 'super_user']:
+            print(f"管理员用户 {user_name}，获取所有进行中的考试")
+            return get_all_active_exams()
+
+        # 考生只能看到分配给他们的考试
         # 1. 优先从考试发布模块获取已发布的考试
         published_exams = get_published_exams_for_student(student_id)
         if published_exams:

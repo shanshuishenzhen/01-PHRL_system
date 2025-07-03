@@ -178,6 +178,70 @@ class LoginView(tk.Frame):
         )
         info_label.pack()
 
+    def verify_user_credentials(self, username, password):
+        """验证用户凭据"""
+        try:
+            # 尝试从数据库验证用户
+            users_file_path = api.get_absolute_path('user_management/users.json')
+            db_path = os.path.join(os.path.dirname(users_file_path), 'users.db')
+
+            if os.path.exists(db_path):
+                try:
+                    import sqlite3
+                    conn = sqlite3.connect(db_path)
+                    conn.row_factory = sqlite3.Row
+                    cursor = conn.cursor()
+
+                    # 查找匹配的用户（通过用户名或身份证号）
+                    cursor.execute("""
+                        SELECT * FROM users
+                        WHERE (username = ? OR id_card = ?) AND password = ?
+                    """, (username, username, password))
+
+                    user = cursor.fetchone()
+                    if user:
+                        user_info = {
+                            'id': user['id'],
+                            'username': user['username'],
+                            'real_name': user['real_name'],
+                            'role': user.get('role', 'student'),
+                            'id_card': user.get('id_card'),
+                            'token': f"token-{user['id']}"
+                        }
+                        conn.close()
+                        return user_info
+                    conn.close()
+                except Exception as e:
+                    print(f"从数据库读取用户数据失败: {e}")
+
+            # 如果数据库验证失败，尝试从JSON文件验证
+            if os.path.exists(users_file_path):
+                try:
+                    with open(users_file_path, 'r', encoding='utf-8') as f:
+                        users_data = json.load(f)
+                        users = users_data.get("users", [])
+
+                        for user in users:
+                            if ((user.get("username") == username or user.get("ID") == username) and
+                                (user.get("password") == password or user.get("password_hash") == password)):
+                                user_info = {
+                                    'id': user.get('id') or user.get('ID'),
+                                    'username': user.get('username'),
+                                    'real_name': user.get('real_name') or user.get('name'),
+                                    'role': user.get('role', 'student'),
+                                    'id_card': user.get('id_card') or user.get('ID'),
+                                    'token': f"token-{user.get('id') or user.get('ID')}"
+                                }
+                                return user_info
+                except Exception as e:
+                    print(f"读取JSON用户数据失败: {e}")
+
+            return None
+
+        except Exception as e:
+            print(f"验证用户凭据时出错: {e}")
+            return None
+
     def handle_login(self):
         username = self.username_entry.get()
         password = self.password_entry.get()
@@ -186,12 +250,53 @@ class LoginView(tk.Frame):
             messagebox.showerror("错误", "准考证号/身份证号和密码不能为空！")
             return
             
-        # 特殊处理admin用户登录
-        if username == "admin" and password == "admin":
-            user_info = {"id": 999, "username": "admin", "role": "admin", "real_name": "系统管理员", "token": "admin-token"}
-            welcome_message = f"欢迎，系统管理员！"
+        # 首先尝试API登录验证
+        try:
+            user_info = api.login(username, password)
+        except Exception as e:
+            print(f"API登录验证失败: {e}")
+            user_info = None
+
+        # 如果API登录失败，尝试直接验证用户身份
+        if not user_info:
+            user_info = self.verify_user_credentials(username, password)
+
+        if not user_info:
+            messagebox.showerror("登录失败", "准考证号/身份证号或密码错误！")
+            return
+
+        # 检查用户角色和权限
+        user_role = user_info.get('role', 'student')
+
+        # 管理员、考评员、超级用户可以直接登录查看所有考试
+        if user_role in ['admin', 'supervisor', 'evaluator', 'super_user']:
+            welcome_message = f"欢迎，{user_info.get('real_name') or user_info.get('username')}！"
             messagebox.showinfo("登录成功", welcome_message)
-            # 通知主应用切换到考试列表页面
+            self.show_exam_list(user_info)
+            return
+
+        # 考生需要检查是否有分配的考试
+        if user_role == 'student':
+            # 检查是否有可用考试
+            exams = []
+            try:
+                print(f"正在为考生 {user_info.get('username')} (ID: {user_info.get('id')}) 获取考试列表...")
+                exams = api.get_exams_for_student(user_info.get('id'), user_info)
+                print(f"获取到 {len(exams)} 个考试")
+            except Exception as e:
+                print(f"获取考试列表时出错: {e}")
+                exams = []
+
+            if not exams:
+                messagebox.showerror("登录失败",
+                    f"您没有可参加的考试，请联系管理员！\n"
+                    f"用户: {user_info.get('real_name') or user_info.get('username')}\n"
+                    f"ID: {user_info.get('id')}")
+                return
+
+            # 有考试才允许考生登录
+            welcome_message = f"欢迎，{user_info.get('real_name') or user_info.get('username')}！"
+            messagebox.showinfo("登录成功", welcome_message)
             self.show_exam_list(user_info)
             return
 
@@ -208,105 +313,11 @@ class LoginView(tk.Frame):
         timer = threading.Timer(5.0, login_timer)
         timer.start()
 
-        # 尝试登录
-        try:
-            user_info = api.login(username, password)
-            # 取消超时计时器
-            timer.cancel()
-            
-            # 如果已经超时，不再处理
-            if login_timeout:
-                return
+        # 取消超时计时器
+        timer.cancel()
 
-            if user_info:
-                # 登录成功后，先检查是否有可用考试
-                exams = []
-                try:
-                    print(f"正在为用户 {user_info.get('username')} (ID: {user_info.get('id')}) 获取考试列表...")
-                    exams = api.get_exams_for_student(user_info.get('id'), user_info)
-                    print(f"获取到 {len(exams)} 个考试")
-                except Exception as e:
-                    print(f"获取考试列表时出错: {e}")
-                    exams = []
-                if not exams:
-                    messagebox.showerror("登录失败", f"您没有可参加的考试，请联系管理员！\n用户ID: {user_info.get('id')}")
-                    return  # 不允许进入考试列表
-                # 有考试才允许登录
-                welcome_message = f"欢迎，{user_info.get('real_name') or user_info.get('username')}！"
-                messagebox.showinfo("登录成功", welcome_message)
-                # 设置用户信息到主应用
-                self.show_exam_list(user_info)
-            else:
-                # 检查是否是因为没有考试信息而登录失败
-                # 尝试直接验证用户名和密码，不检查考试信息
-                users_file_path = api.get_absolute_path('user_management/users.json')
-                user_exists = False
-                user_name = ""
-                
-                # 尝试从数据库验证用户
-                db_path = os.path.join(os.path.dirname(users_file_path), 'users.db')
-                if os.path.exists(db_path):
-                    try:
-                        import sqlite3
-                        conn = sqlite3.connect(db_path)
-                        conn.row_factory = sqlite3.Row
-                        cursor = conn.cursor()
-                        
-                        # 查找匹配的用户（通过用户名或身份证号）
-                        cursor.execute("""
-                            SELECT * FROM users 
-                            WHERE (username = ? OR id_card = ?)
-                        """, (username, username))
-                        
-                        user = cursor.fetchone()
-                        if user:
-                            user_exists = True
-                            user_name = user['real_name'] or user['username']
-                            # 检查密码是否匹配
-                            if user['password'] == password:
-                                # 密码正确，但没有考试信息
-                                error_message = f"{user_name}，您没有可参加的考试信息！请联系管理员。"
-                                messagebox.showerror("登录失败", error_message)
-                            else:
-                                # 密码错误
-                                messagebox.showerror("登录失败", "准考证号/身份证号或密码错误！")
-                        conn.close()
-                    except Exception as e:
-                        print(f"从数据库读取用户数据失败: {e}")
-                
-                # 如果数据库验证失败，尝试从JSON文件验证（作为备选方案）
-                if not user_exists and os.path.exists(users_file_path):
-                    try:
-                        with open(users_file_path, 'r', encoding='utf-8') as f:
-                            users_data = json.load(f)
-                            users = users_data.get("users", [])
-                            
-                            for user in users:
-                                if (user.get("username") == username or user.get("ID") == username):
-                                    user_exists = True
-                                    user_name = user.get("real_name") or user.get("username")
-                                    # 检查密码是否匹配
-                                    if (user.get("password") == password or user.get("password_hash") == password):
-                                        # 密码正确，但没有考试信息
-                                        error_message = f"{user_name}，您没有可参加的考试信息！请联系管理员。"
-                                        messagebox.showerror("登录失败", error_message)
-                                    else:
-                                        # 密码错误
-                                        messagebox.showerror("登录失败", "准考证号/身份证号或密码错误！")
-                                    break
-                    except Exception as e:
-                        print(f"读取JSON用户数据失败: {e}")
-                
-                # 如果用户不存在
-                if not user_exists:
-                    messagebox.showerror("登录失败", "准考证号/身份证号或密码错误！")
-        except Exception as e:
-            # 取消超时计时器
-            timer.cancel()
-            # 如果已经超时，不再处理
-            if login_timeout:
-                return
-            messagebox.showerror("登录错误", f"登录过程中发生错误: {e}")
+        # 如果已经超时，不再处理
+        if login_timeout:
             return
 
 

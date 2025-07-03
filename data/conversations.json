@@ -1,14 +1,38 @@
 {
-    "conversations": [
+  "conversations": [
+    {
+      "id": "test-001",
+      "topic": "主控台启动问题",
+      "question": "主控台启动时显示中间窗口，影响用户体验",
+      "solution": "修改启动方式为静默启动，使用CREATE_NO_WINDOW标志",
+      "status": "已解决",
+      "attempts": [
         {
-            "id": "48137f73-48a0-4f71-8d5e-6b442cd35294",
-            "topic": "20250629：客户机关联试卷失败",
-            "question": "客户机关联试卷失败",
-            "solution": null,
-            "attempts": [],
-            "status": "未解决",
-            "created_at": "2025-06-29 15:00:56",
-            "updated_at": "2025-06-29 15:00:56"
+          "description": "尝试修改subprocess参数",
+          "timestamp": "2025-07-03 10:00:00"
         }
-    ]
+      ],
+      "created_at": "2025-07-03 09:30:00",
+      "updated_at": "2025-07-03 10:30:00"
+    },
+    {
+      "id": "test-002",
+      "topic": "端口占用问题",
+      "question": "题库管理和阅卷中心启动时提示端口占用",
+      "solution": "添加端口检查和释放功能，智能处理端口冲突",
+      "status": "已解决",
+      "attempts": [
+        {
+          "description": "检查psutil模块",
+          "timestamp": "2025-07-03 11:00:00"
+        },
+        {
+          "description": "实现端口释放功能",
+          "timestamp": "2025-07-03 11:30:00"
+        }
+      ],
+      "created_at": "2025-07-03 11:00:00",
+      "updated_at": "2025-07-03 12:00:00"
+    }
+  ]
 }
