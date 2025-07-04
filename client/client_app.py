@@ -353,7 +353,7 @@ class ExamListView(tk.Frame):
         # 顶部标题区域
         title_frame = tk.Frame(self, bg=self.colors['light'])
         title_frame.pack(fill=tk.X, pady=(0, 20))
-        
+
         # 欢迎信息 - 优先显示真实姓名
         if self.user_info:
             display_name = self.user_info.get('real_name') or self.user_info.get('username') or '考生'
@@ -361,41 +361,76 @@ class ExamListView(tk.Frame):
             display_name = '考生'
         welcome_text = f"👋 欢迎, {display_name}！"
         welcome_label = tk.Label(
-            title_frame, 
-            text=welcome_text, 
+            title_frame,
+            text=welcome_text,
             font=("Microsoft YaHei", 20, "bold"),
             fg=self.colors['primary'],
             bg=self.colors['light']
         )
         welcome_label.pack()
-        
+
         # 如果有部门信息，显示部门
         if self.user_info and self.user_info.get('department'):
             department_text = f"部门: {self.user_info.get('department')}"
             department_label = tk.Label(
-                title_frame, 
-                text=department_text, 
+                title_frame,
+                text=department_text,
                 font=("Microsoft YaHei", 12),
                 fg=self.colors['info'],
                 bg=self.colors['light']
             )
             department_label.pack(pady=(5, 0))
-        
+
+        # 根据用户角色显示不同的提示文本
+        user_role = self.user_info.get('role', 'student') if self.user_info else 'student'
+        if user_role in ['admin', 'supervisor', 'evaluator', 'super_user']:
+            subtitle_text = "考试管理："
+        else:
+            subtitle_text = "您可以参加的考试："
+
         subtitle_label = tk.Label(
-            title_frame, 
-            text="您可以参加的考试：", 
+            title_frame,
+            text=subtitle_text,
             font=("Microsoft YaHei", 14),
             fg=self.colors['dark'],
             bg=self.colors['light']
         )
         subtitle_label.pack(pady=(5, 0))
 
-        # 考试列表容器
-        list_container = tk.Frame(self, bg=self.colors['light'])
-        list_container.pack(fill=tk.BOTH, expand=True)
-        
+        # 创建带滚动条的考试列表容器
+        self.create_scrollable_exam_list()
+
+    def create_scrollable_exam_list(self):
+        """创建带滚动条的考试列表"""
+        # 创建主容器
+        main_container = tk.Frame(self, bg=self.colors['light'])
+        main_container.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+
+        # 创建Canvas和滚动条
+        canvas = tk.Canvas(main_container, bg=self.colors['light'], highlightthickness=0)
+        scrollbar = tk.Scrollbar(main_container, orient="vertical", command=canvas.yview)
+        self.scrollable_frame = tk.Frame(canvas, bg=self.colors['light'])
+
+        # 配置滚动
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        # 布局Canvas和滚动条
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        # 绑定鼠标滚轮事件
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+
         # 获取并显示考试列表
-        self.display_exams(list_container)
+        self.display_exams(self.scrollable_frame)
 
     def display_exams(self, container):
         print("=== display_exams 被调用 ===")
@@ -413,52 +448,99 @@ class ExamListView(tk.Frame):
                 exams = []
         else:
             print("display_exams: 用户信息无效或缺少ID")
+
+        # 获取用户角色
+        user_role = self.user_info.get('role', 'student') if self.user_info else 'student'
+        is_admin_user = user_role in ['admin', 'supervisor', 'evaluator', 'super_user']
+
         if exams:
             print(f"for exam in exams: 之前，exams={exams}")
+
+            # 根据用户角色过滤考试
+            filtered_exams = []
             for exam in exams:
+                status = exam.get('status')
+                if is_admin_user:
+                    # 管理员可以看到所有考试
+                    filtered_exams.append(exam)
+                else:
+                    # 考生只能看到可参加的考试
+                    if status in ['available', 'published']:
+                        filtered_exams.append(exam)
+                    else:
+                        print(f"过滤掉考试: {exam.get('name')} (状态: {status})")
+
+            print(f"过滤后的考试数量: {len(filtered_exams)}")
+
+            for exam in filtered_exams:
                 print(f"渲染考试卡片: {exam.get('name')} status={exam.get('status')}")
                 card = tk.Frame(container, bg=self.colors['white'], relief="solid", borderwidth=1)
-                card.pack(fill=tk.X, padx=20, pady=10)
+                card.pack(fill=tk.X, padx=0, pady=10)
+
                 # 考试名称
                 name_label = tk.Label(card, text=exam.get('name', '未知考试'), font=("Microsoft YaHei", 14, "bold"), fg=self.colors['primary'], bg=self.colors['white'])
                 name_label.pack(anchor="w", padx=10, pady=(10, 0))
+
                 # 状态提示
                 status = exam.get('status')
-                status_text = {
-                    'available': '可参加',
-                    'draft': '考试未发布',
-                    'completed': '考试已结束',
-                }.get(status, f"其它状态：{status}")
+                if is_admin_user:
+                    # 管理员用户看到更详细的状态
+                    status_text = {
+                        'available': '已发布 - 可参加',
+                        'draft': '草稿 - 未发布',
+                        'completed': '已完成',
+                        'in_progress': '进行中',
+                        'published': '已发布'
+                    }.get(status, f"状态：{status}")
+                else:
+                    # 考生只看到简化的状态
+                    status_text = {
+                        'available': '可参加',
+                        'published': '可参加'
+                    }.get(status, f"状态：{status}")
+
                 status_color = {
                     'available': self.colors['success'],
+                    'published': self.colors['success'],
                     'draft': self.colors['warning'],
                     'completed': self.colors['danger'],
+                    'in_progress': self.colors['info']
                 }.get(status, self.colors['dark'])
+
                 status_label = tk.Label(card, text=status_text, font=("Microsoft YaHei", 12), fg=status_color, bg=self.colors['white'])
                 status_label.pack(anchor="w", padx=10, pady=(0, 10))
-                # 按钮
+
+                # 按钮区域
                 btn_frame = tk.Frame(card, bg=self.colors['white'])
                 btn_frame.pack(anchor="e", padx=10, pady=(0, 10))
-                if status == 'available':
-                    btn = tk.Button(btn_frame, text="进入考试", font=("Microsoft YaHei", 12), bg=self.colors['primary'], fg=self.colors['white'], command=lambda e=exam: self.show_exam_page(e))
-                    btn.pack(side=tk.RIGHT)
-                elif status == 'draft':
-                    btn = tk.Button(btn_frame, text="考试未发布", font=("Microsoft YaHei", 12), state="disabled", bg=self.colors['warning'], fg=self.colors['white'])
-                    btn.pack(side=tk.RIGHT)
-                elif status == 'completed':
-                    btn = tk.Button(btn_frame, text="考试已结束", font=("Microsoft YaHei", 12), state="disabled", bg=self.colors['danger'], fg=self.colors['white'])
+
+                # 根据用户角色和考试状态显示不同的按钮
+                if is_admin_user:
+                    # 管理员用户：点击后界面不变，只显示查看按钮
+                    btn = tk.Button(btn_frame, text="查看详情", font=("Microsoft YaHei", 12),
+                                  bg=self.colors['info'], fg=self.colors['white'],
+                                  command=lambda e=exam: self.view_exam_details(e))
                     btn.pack(side=tk.RIGHT)
                 else:
-                    btn = tk.Button(btn_frame, text="不可用", font=("Microsoft YaHei", 12), state="disabled", bg=self.colors['dark'], fg=self.colors['white'])
+                    # 考生用户：只有可参加的考试才能进入
+                    btn = tk.Button(btn_frame, text="进入考试", font=("Microsoft YaHei", 12),
+                                  bg=self.colors['primary'], fg=self.colors['white'],
+                                  command=lambda e=exam: self.enter_exam_fullscreen(e))
                     btn.pack(side=tk.RIGHT)
             print("for exam in exams: 之后")
         else:
             # 没有考试时的提示
+            user_role = self.user_info.get('role', 'student') if self.user_info else 'student'
+            if user_role in ['admin', 'supervisor', 'evaluator', 'super_user']:
+                no_exam_text = "📝 暂无考试项目"
+            else:
+                no_exam_text = "📝 暂无可参加的考试，请联系管理员"
+
             no_exam_frame = tk.Frame(container, bg=self.colors['white'], relief="solid", borderwidth=1)
             no_exam_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
             no_exam_label = tk.Label(
-                no_exam_frame, 
-                text="📝 暂无可用考试，请联系管理员", 
+                no_exam_frame,
+                text=no_exam_text,
                 font=("Microsoft YaHei", 16),
                 fg=self.colors['dark'],
                 bg=self.colors['white']
@@ -478,11 +560,266 @@ class ExamListView(tk.Frame):
         exam_details = api.get_exam_details(exam['id'])
         total_score = exam_details.get('total_score', 100)
         pass_score = exam_details.get('pass_score', 60)
-        
+
         # 确认对话框，显示总分和及格分
         if messagebox.askyesno("确认", f"您确定要进入考试 '{exam['name']}' 吗？\n\n总分: {total_score}\n及格分: {pass_score}\n\n进入后将开始计时。"):
             # 通知主应用切换到答题页面
             self.show_exam_page(self.user_info, exam)
+
+    def view_exam_details(self, exam):
+        """管理员查看考试详情（界面不变）"""
+        print(f"管理员查看考试详情: {exam.get('name')}")
+        # 显示考试详情对话框
+        details = f"""考试名称: {exam.get('name', '未知')}
+考试状态: {exam.get('status', '未知')}
+考试ID: {exam.get('id', '未知')}
+创建时间: {exam.get('created_at', '未知')}
+题目数量: {len(exam.get('questions', []))}
+考试时长: {exam.get('duration', '未设置')} 分钟"""
+
+        messagebox.showinfo("考试详情", details)
+
+    def enter_exam_fullscreen(self, exam):
+        """考生进入全屏考试模式"""
+        print(f"考生进入全屏考试: {exam.get('name')}")
+
+        # 获取考试详情，包括总分和及格分
+        try:
+            exam_details = api.get_exam_details(exam['id'])
+            total_score = exam_details.get('total_score', 100)
+            pass_score = exam_details.get('pass_score', 60)
+            time_limit = exam_details.get('time_limit', 60)
+            questions_count = len(exam_details.get('questions', []))
+        except Exception as e:
+            print(f"获取考试详情失败: {e}")
+            total_score = 100
+            pass_score = 60
+            time_limit = 60
+            questions_count = 0
+
+        # 显示进入考试确认对话框
+        result = messagebox.askyesno(
+            "进入考试",
+            f"即将进入考试：{exam.get('name')}\n\n"
+            f"考试信息：\n"
+            f"• 题目数量：{questions_count} 题\n"
+            f"• 考试时长：{time_limit} 分钟\n"
+            f"• 总分：{total_score} 分\n"
+            f"• 及格分：{pass_score} 分\n\n"
+            "注意事项：\n"
+            "• 考试将以全屏模式进行\n"
+            "• 请勿切换到其他应用程序\n"
+            "• 请勿关闭浏览器或应用\n"
+            "• 考试过程中将监控您的操作\n"
+            "• 按 Ctrl+Shift+D 可退出防作弊模式（调试用）\n\n"
+            "确定要开始考试吗？"
+        )
+
+        if result:
+            try:
+                # 启用防切屏和防作弊功能
+                self.enable_anti_cheat_mode()
+
+                # 进入全屏模式
+                self.master.attributes('-fullscreen', True)
+                self.master.attributes('-topmost', True)
+
+                # 显示考试页面
+                print(f"正在跳转到考试页面: {exam.get('name')}")
+                self.show_exam_page(self.user_info, exam)
+
+            except Exception as e:
+                print(f"进入考试失败: {e}")
+                messagebox.showerror("错误", f"进入考试失败: {str(e)}")
+                # 如果失败，退出防作弊模式
+                self.disable_anti_cheat_mode()
+
+    def enable_anti_cheat_mode(self):
+        """启用防作弊模式"""
+        print("启用防作弊模式...")
+
+        # 添加调试退出接口 - Ctrl+Shift+D 退出防作弊模式
+        self.master.bind('<Control-Shift-D>', self.debug_exit_anti_cheat)
+
+        # 禁用Alt+Tab等快捷键
+        self.master.bind('<Alt-Tab>', lambda e: 'break')
+        self.master.bind('<Control-Alt-Delete>', lambda e: 'break')
+        self.master.bind('<Alt-F4>', lambda e: 'break')
+        self.master.bind('<Control-Shift-Escape>', lambda e: 'break')
+
+        # 使用更精确的窗口状态监控，而不是焦点变化
+        self.master.bind('<Unmap>', self.on_window_minimized)  # 窗口最小化
+        self.master.bind('<Map>', self.on_window_restored)     # 窗口恢复
+
+        # 监控窗口激活状态变化（更准确的切屏检测）
+        self.master.bind('<Deactivate>', self.on_window_deactivated)
+        self.master.bind('<Activate>', self.on_window_activated)
+
+        # 禁用右键菜单
+        self.master.bind('<Button-3>', lambda e: 'break')
+
+        # 设置全屏和置顶
+        self.master.attributes('-fullscreen', True)
+        self.master.attributes('-topmost', True)
+
+        print("防作弊模式已启用")
+        print("调试提示: 按 Ctrl+Shift+D 可退出防作弊模式")
+
+    def debug_exit_anti_cheat(self, event):
+        """调试用：退出防作弊模式"""
+        print("调试模式：退出防作弊模式")
+
+        # 显示确认对话框
+        result = messagebox.askyesno(
+            "调试模式",
+            "确定要退出防作弊模式吗？\n\n"
+            "这将退出全屏模式并恢复正常操作。\n"
+            "此功能仅用于调试目的。"
+        )
+
+        if result:
+            self.disable_anti_cheat_mode()
+            messagebox.showinfo("调试模式", "已退出防作弊模式")
+
+    def disable_anti_cheat_mode(self):
+        """禁用防作弊模式"""
+        print("禁用防作弊模式...")
+
+        # 恢复正常模式
+        self.master.attributes('-fullscreen', False)
+        self.master.attributes('-topmost', False)
+
+        # 解除快捷键绑定
+        try:
+            self.master.unbind('<Alt-Tab>')
+            self.master.unbind('<Control-Alt-Delete>')
+            self.master.unbind('<Alt-F4>')
+            self.master.unbind('<Control-Shift-Escape>')
+            self.master.unbind('<Unmap>')
+            self.master.unbind('<Map>')
+            self.master.unbind('<Deactivate>')
+            self.master.unbind('<Activate>')
+            self.master.unbind('<Button-3>')
+            self.master.unbind('<Control-Shift-D>')
+        except Exception as e:
+            print(f"解除事件绑定时出错: {e}")
+
+        print("防作弊模式已禁用")
+
+    def on_focus_lost(self, event):
+        """窗口失去焦点时的处理"""
+        print(f"焦点变化事件: {event.widget if hasattr(event, 'widget') else 'unknown'}")
+
+        # 检查是否是真正的切屏行为
+        # 如果焦点转移到了其他应用程序，才触发警告
+        try:
+            # 获取当前活动窗口
+            import tkinter as tk
+            current_focus = self.master.focus_get()
+
+            # 如果焦点完全丢失（切换到其他应用），才触发警告
+            if current_focus is None:
+                print("警告：检测到真正的切屏行为！")
+                # 记录切屏行为
+                self.log_cheat_attempt("窗口失去焦点")
+
+                # 延迟处理，避免与正常操作冲突
+                self.master.after(100, self.handle_real_focus_loss)
+            else:
+                print(f"焦点转移到内部组件: {current_focus}")
+
+        except Exception as e:
+            print(f"焦点检查异常: {e}")
+
+    def handle_real_focus_loss(self):
+        """处理真正的焦点丢失"""
+        try:
+            # 再次检查焦点状态
+            current_focus = self.master.focus_get()
+            if current_focus is None:
+                print("确认为真正的切屏行为，显示警告")
+
+                # 强制回到前台
+                self.master.lift()
+                self.master.focus_force()
+
+                # 显示警告
+                messagebox.showwarning(
+                    "考试警告",
+                    "检测到您切换了应用程序！\n"
+                    "这可能被视为作弊行为。\n"
+                    "请专心完成考试。"
+                )
+            else:
+                print("焦点已恢复，取消警告")
+        except Exception as e:
+            print(f"处理焦点丢失异常: {e}")
+
+    def on_window_minimized(self, event):
+        """窗口被最小化时的处理"""
+        print("警告：检测到窗口最小化！")
+        self.log_cheat_attempt("窗口最小化")
+
+        # 立即恢复窗口
+        self.master.deiconify()
+        self.master.lift()
+        self.master.focus_force()
+
+        messagebox.showwarning(
+            "考试警告",
+            "检测到窗口最小化！\n"
+            "考试期间不允许最小化窗口。\n"
+            "请专心完成考试。"
+        )
+
+    def on_window_restored(self, event):
+        """窗口恢复时的处理"""
+        print("窗口已恢复")
+
+    def on_window_deactivated(self, event):
+        """窗口失去激活状态时的处理"""
+        print("窗口失去激活状态")
+        # 延迟检查，避免误报
+        self.master.after(200, self.check_window_activation)
+
+    def on_window_activated(self, event):
+        """窗口获得激活状态时的处理"""
+        print("窗口获得激活状态")
+
+    def check_window_activation(self):
+        """检查窗口激活状态"""
+        try:
+            # 检查窗口是否仍然失去激活状态
+            if not self.master.focus_get():
+                print("警告：检测到切换到其他应用程序！")
+                self.log_cheat_attempt("切换应用程序")
+
+                # 强制回到前台
+                self.master.lift()
+                self.master.focus_force()
+
+                messagebox.showwarning(
+                    "考试警告",
+                    "检测到切换到其他应用程序！\n"
+                    "考试期间请保持在考试界面。\n"
+                    "请专心完成考试。"
+                )
+        except Exception as e:
+            print(f"检查窗口激活状态异常: {e}")
+
+    def on_focus_gained(self, event):
+        """窗口获得焦点时的处理"""
+        print("窗口重新获得焦点")
+
+    def log_cheat_attempt(self, action):
+        """记录可疑的作弊行为"""
+        import datetime
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        log_entry = f"[{timestamp}] 用户: {self.user_info.get('username', 'unknown')} - 行为: {action}"
+        print(f"作弊日志: {log_entry}")
+
+        # 这里可以将日志发送到服务器
+        # api.log_cheat_attempt(self.user_info.get('id'), action, timestamp)
 
 
 class ExamPageView(tk.Frame):
@@ -696,6 +1033,11 @@ class ExamPageView(tk.Frame):
         )
         self.submit_button.pack(side=tk.RIGHT, padx=15, pady=10)
 
+        # 为按钮设置事件处理，防止触发防作弊警告
+        self.setup_button_events(self.prev_button)
+        self.setup_button_events(self.next_button)
+        self.setup_button_events(self.submit_button)
+
     def update_multiple_choice(self, question_id, option, is_selected):
         """更新多选题的答案"""
         if question_id in self.answers and isinstance(self.answers[question_id], dict):
@@ -884,7 +1226,10 @@ class ExamPageView(tk.Frame):
             answer_entry = tk.Entry(answer_frame, font=("Microsoft YaHei", 12), width=30)
             answer_entry.pack(side='left', padx=5)
             answer_entry.insert(0, current_answer)
-            
+
+            # 为输入框绑定事件，防止触发防作弊警告
+            self.setup_input_widget_events(answer_entry)
+
             # 将Entry对象存储到answers字典中
             self.answers[q_id] = answer_entry
             
@@ -900,13 +1245,60 @@ class ExamPageView(tk.Frame):
             answer_text = tk.Text(answer_frame, font=("Microsoft YaHei", 12), width=50, height=10)
             answer_text.pack(fill='both', expand=True, padx=5, pady=5)
             answer_text.insert('1.0', current_answer)
-            
+
+            # 为文本框绑定事件，防止触发防作弊警告
+            self.setup_input_widget_events(answer_text)
+
             # 将Text对象存储到answers字典中
             self.answers[q_id] = answer_text
 
         # 更新按钮状态
         self.prev_button.config(state=tk.NORMAL if self.current_question_index > 0 else tk.DISABLED)
         self.next_button.config(state=tk.NORMAL if self.current_question_index < len(self.questions) - 1 else tk.DISABLED)
+
+    def setup_input_widget_events(self, widget):
+        """为输入组件设置事件处理，防止触发防作弊警告"""
+        def on_widget_focus_in(event):
+            print(f"输入组件获得焦点: {widget.__class__.__name__}")
+            # 阻止事件冒泡到父窗口
+            return "break"
+
+        def on_widget_focus_out(event):
+            print(f"输入组件失去焦点: {widget.__class__.__name__}")
+            # 阻止事件冒泡到父窗口
+            return "break"
+
+        def on_widget_click(event):
+            print(f"点击输入组件: {widget.__class__.__name__}")
+            # 阻止事件冒泡到父窗口
+            return "break"
+
+        # 绑定事件
+        widget.bind('<FocusIn>', on_widget_focus_in)
+        widget.bind('<FocusOut>', on_widget_focus_out)
+        widget.bind('<Button-1>', on_widget_click)
+
+    def setup_button_events(self, button):
+        """为按钮设置事件处理，防止触发防作弊警告"""
+        def on_button_click(event):
+            print(f"点击按钮: {button.cget('text')}")
+            # 阻止事件冒泡到父窗口
+            return "break"
+
+        def on_button_focus_in(event):
+            print(f"按钮获得焦点: {button.cget('text')}")
+            # 阻止事件冒泡到父窗口
+            return "break"
+
+        def on_button_focus_out(event):
+            print(f"按钮失去焦点: {button.cget('text')}")
+            # 阻止事件冒泡到父窗口
+            return "break"
+
+        # 绑定事件
+        button.bind('<Button-1>', on_button_click)
+        button.bind('<FocusIn>', on_button_focus_in)
+        button.bind('<FocusOut>', on_button_focus_out)
 
     def _save_current_answer(self):
         """在切换题目或交卷前，保存当前题目的答案"""
@@ -1092,7 +1484,7 @@ class ExamClient(tk.Tk):
                     f.write('{\n    "server": {"host": "127.0.0.1", "port": 5000, "protocol": "http"}\n}')
 
     def show_exam(self, exam_id):
-        """显示考试视图"""
+        """显示考试视图（通过考试ID）"""
         if self.current_frame:
             self.current_frame.destroy()
         exam_info = {'id': exam_id}
@@ -1103,6 +1495,24 @@ class ExamClient(tk.Tk):
             on_submit_callback=lambda: self.show_exam_list()
         )
         self.current_frame.pack(fill=tk.BOTH, expand=True)
+
+    def show_exam_page(self, user_info, exam):
+        """显示考试页面（通过考试对象）"""
+        print(f"show_exam_page被调用: 用户={user_info.get('username')}, 考试={exam.get('name')}")
+
+        if self.current_frame:
+            self.current_frame.destroy()
+
+        # 使用完整的考试信息
+        self.current_frame = ExamPageView(
+            master=self,
+            user_info=user_info,
+            exam_info=exam,
+            on_submit_callback=lambda: self.show_exam_list()
+        )
+        self.current_frame.pack(fill=tk.BOTH, expand=True)
+
+        print(f"考试页面已创建并显示: {exam.get('name')}")
 
     def show_exam_list(self, user_info=None):
         """显示考试列表视图"""
@@ -1116,7 +1526,7 @@ class ExamClient(tk.Tk):
         self.current_frame = ExamListView(
             master=self,
             user_info=self.user_info,
-            show_exam_callback=self.show_exam
+            show_exam_callback=self.show_exam_page
         )
         self.current_frame.pack(fill=tk.BOTH, expand=True)
 
@@ -1179,6 +1589,8 @@ class ExamClient(tk.Tk):
             self.attributes('-fullscreen', False)
             self.attributes('-topmost', False)
             self.is_fullscreen = False
+
+
 
 
 

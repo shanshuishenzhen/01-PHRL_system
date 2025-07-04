@@ -7,6 +7,29 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import OperationalError
 from models import Question, QuestionBank
 
+
+def safe_filename(filename):
+    """生成安全的文件名，处理中文字符和特殊字符"""
+    import re
+    import hashlib
+    
+    # 移除或替换不安全的字符
+    safe_name = re.sub(r'[<>:"/\|?*]', '_', filename)
+    
+    # 如果包含非ASCII字符，使用hash值
+    if any(ord(char) > 127 for char in safe_name):
+        # 保留原始名称的前缀，加上hash值
+        prefix = re.sub(r'[^a-zA-Z0-9_-]', '', safe_name)[:10]
+        hash_value = hashlib.md5(filename.encode('utf-8')).hexdigest()[:8]
+        safe_name = f"{prefix}_{hash_value}"
+    
+    # 确保文件名不为空且不超过100字符
+    if not safe_name or len(safe_name) > 100:
+        hash_value = hashlib.md5(filename.encode('utf-8')).hexdigest()[:16]
+        safe_name = f"report_{hash_value}"
+    
+    return safe_name
+
 EXPECTED_COLUMNS = [
     'ID', '序号', '认定点代码', '题型代码', '题号', '试题（题干）',
     '试题（选项A）', '试题（选项B）', '试题（选项C）', '试题（选项D）', '试题（选项E）',
@@ -51,27 +74,70 @@ def import_questions_from_excel(filepath, db_session):
     detailed_errors = []
     bank_cache = {} # 题库名称到ID的缓存
 
-    # 1. 查数据库已存在ID
+    # 1. 查数据库已存在的(ID, 题库名称)组合
     try:
-        db_existing_ids = set([row[0] for row in db_session.execute(text('SELECT id FROM questions')).fetchall()])
-    except Exception:
-        db_existing_ids = set()
+        db_existing_combinations = set([
+            (row[0], row[1]) for row in db_session.execute(
+                text('SELECT q.id, qb.name FROM questions q JOIN question_banks qb ON q.question_bank_id = qb.id')
+            ).fetchall()
+        ])
+        print(f"当前项目数据库中已存在 {len(db_existing_combinations)} 个题目(ID,题库)组合")
+    except Exception as e:
+        print(f"查询现有(ID,题库)组合失败: {e}")
+        db_existing_combinations = set()
 
-    # 2. Excel内部和数据库冲突自动修正ID
-    seen_ids = set(db_existing_ids)
+    # 2. 统计Excel中的(ID, 题库名称)组合情况
+    excel_combinations = []
     for index, row in df.iterrows():
-        orig_id = str(row.get('ID', '')).strip()
+        question_id = str(row.get('ID', '')).strip()
         bank_name = str(row.get('题库名称', '')).strip()
-        new_id = orig_id
-        suffix = bank_name[:4] if bank_name else 'BK'
-        seq = 1
-        while new_id in seen_ids:
-            new_id = f"{orig_id}_{suffix}{seq}"
-            seq += 1
-        df.at[index, 'ID'] = new_id
-        seen_ids.add(new_id)
+        if question_id and bank_name:
+            excel_combinations.append((question_id, bank_name))
 
-    # 3. 自动同步题库表
+    print(f"Excel文件中包含 {len(excel_combinations)} 个题目")
+
+    # 统计重复情况
+    from collections import Counter
+    combination_counts = Counter(excel_combinations)
+    duplicate_combinations = {combo: count for combo, count in combination_counts.items() if count > 1}
+
+    if duplicate_combinations:
+        print(f"Excel中发现 {len(duplicate_combinations)} 个重复(ID,题库)组合:")
+        for (id_val, bank_name), count in list(duplicate_combinations.items())[:3]:
+            print(f"  {id_val} in {bank_name}: 出现 {count} 次")
+
+    # 3. 去重处理：保留第一个出现的(ID, 题库)组合，跳过后续重复
+    seen_excel_combinations = set()
+    seen_db_combinations = set(db_existing_combinations)
+    rows_to_skip = set()
+
+    for index, row in df.iterrows():
+        question_id = str(row.get('ID', '')).strip()
+        bank_name = str(row.get('题库名称', '')).strip()
+        combination = (question_id, bank_name)
+
+        if not question_id or not bank_name:
+            rows_to_skip.add(index)
+            continue
+
+        # 如果在Excel中已经见过这个(ID, 题库)组合，跳过
+        if combination in seen_excel_combinations:
+            rows_to_skip.add(index)
+            continue
+
+        # 如果在数据库中已存在这个(ID, 题库)组合，跳过
+        if combination in seen_db_combinations:
+            rows_to_skip.add(index)
+            continue
+
+        # 记录这个(ID, 题库)组合
+        seen_excel_combinations.add(combination)
+        seen_db_combinations.add(combination)
+
+    print(f"将跳过 {len(rows_to_skip)} 个重复或已存在的题目")
+    print(f"将导入 {len(df) - len(rows_to_skip)} 个新题目")
+
+        # 3. 自动同步题库表
     all_bank_names = set(str(row.get('题库名称', '')).strip() for _, row in df.iterrows() if str(row.get('题库名称', '')).strip())
     if all_bank_names:
         try:
@@ -94,19 +160,39 @@ def import_questions_from_excel(filepath, db_session):
 
     for index, row in df.iterrows():
         row_num = index + 2
+        
+        # 跳过重复的行
+        if index in rows_to_skip:
+            continue
+            
         try:
             # 数据验证和转换
-            question_id_str = str(row['ID']).strip()
+            original_id = str(row['ID']).strip()
             bank_name = str(row.get('题库名称', '')).strip()
 
-            if not question_id_str or not bank_name:
+            if not original_id or not bank_name:
                 detailed_errors.append({
                     "row": row_num,
-                    "id": question_id_str,
+                    "id": original_id,
                     "type": "validation",
                     "message": "ID和题库名称不能为空"
                 })
                 continue
+
+            # 生成唯一的数据库ID：原始ID + 题库ID的哈希
+            bank_id = bank_cache.get(bank_name)
+            if not bank_id:
+                # 如果缓存没有，可能意味着题库同步失败，跳过此行
+                detailed_errors.append({
+                    "row": row_num,
+                    "id": original_id,
+                    "type": "validation",
+                    "message": f"无法找到或创建题库 '{bank_name}'"
+                })
+                continue
+
+            # 创建唯一的数据库ID：原始ID + 题库ID
+            question_id_str = f"{original_id}#{bank_id}"
             
             # 从缓存获取 bank_id
             bank_id = bank_cache.get(bank_name)
@@ -163,9 +249,9 @@ def import_questions_from_excel(filepath, db_session):
                 })
                 continue
 
-            # 创建问题数据
+            # 创建问题数据 - 保持原始ID不变
             question_data = {
-                'id': question_id_str,
+                'id': question_id_str,  # 直接使用原始ID，不做任何修改
                 'question_bank_id': bank_id, # 使用外键ID
                 'question_type_code': question_type,
                 'question_number': str(row.get('题号', '')).strip(),
@@ -242,34 +328,83 @@ def import_questions_from_excel(filepath, db_session):
 
 def export_error_report(errors, filename=None):
     """导出错误报告到文本文件"""
-    # 创建错误报告目录
-    report_dir = "error_reports"
-    if not os.path.exists(report_dir):
-        os.makedirs(report_dir)
-    
-    # 生成文件名
-    if not filename:
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"error_report_{timestamp}.txt"
-    
-    filepath = os.path.join(report_dir, filename)
-    
-    # 写入错误报告
-    with open(filepath, 'w', encoding='utf-8') as f:
-        if not errors:
-            f.write("导入成功，没有错误。\n")
+    try:
+        # 创建错误报告目录 - 使用绝对路径
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        report_dir = os.path.join(current_dir, "error_reports")
+
+        # 确保目录存在
+        if not os.path.exists(report_dir):
+            os.makedirs(report_dir, exist_ok=True)
+
+        # 生成安全的文件名
+        if not filename:
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = safe_filename(f"sample_import_errors_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
         else:
-            f.write(f"导入错误报告 ({datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')})\n")
-            f.write("="*50 + "\n")
-            f.write(f"总错误数: {len(errors)}\n\n")
-            
-            for error in errors:
-                row_info = f"第 {error.get('row', 'N/A')} 行" if 'row' in error else ""
-                id_info = f"(ID: {error.get('id', '')})" if 'id' in error else ""
-                f.write(f"{row_info} {id_info}: {error['message']}\n")
-    
-    print(f"\n错误报告已导出到: {filepath}")
-    return filepath
+            # 清理文件名中的特殊字符
+            filename = "".join(c for c in filename if c.isalnum() or c in "._-")
+            if not filename.endswith('.txt'):
+                filename += '.txt'
+
+        filepath = os.path.join(report_dir, filename)
+
+        # 写入错误报告 - 使用更安全的方式
+        try:
+            with open(filepath, 'w', encoding='utf-8', newline='') as f:
+                if not errors:
+                    f.write("导入成功，没有错误。\n")
+                else:
+                    f.write(f"导入错误报告 ({datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')})\n")
+                    f.write("="*50 + "\n")
+                    f.write(f"总错误数: {len(errors)}\n\n")
+
+                    for error in errors:
+                        row_info = f"第 {error.get('row', 'N/A')} 行" if 'row' in error else ""
+                        id_info = f"(ID: {error.get('id', '')})" if 'id' in error else ""
+                        message = str(error.get('message', '未知错误'))
+                        f.write(f"{row_info} {id_info}: {message}\n")
+
+                # 确保数据写入磁盘
+                f.flush()
+                os.fsync(f.fileno())
+
+        except Exception as write_error:
+            # 如果写入失败，尝试使用临时文件
+            print(f"警告: 写入错误报告失败: {write_error}")
+
+            # 使用临时文件作为备选方案
+            import tempfile
+            temp_fd, temp_path = tempfile.mkstemp(suffix='.txt', prefix='error_report_')
+            try:
+                with os.fdopen(temp_fd, 'w', encoding='utf-8') as f:
+                    if not errors:
+                        f.write("导入成功，没有错误。\n")
+                    else:
+                        f.write(f"导入错误报告 ({datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')})\n")
+                        f.write("="*50 + "\n")
+                        f.write(f"总错误数: {len(errors)}\n\n")
+
+                        for error in errors:
+                            row_info = f"第 {error.get('row', 'N/A')} 行" if 'row' in error else ""
+                            id_info = f"(ID: {error.get('id', '')})" if 'id' in error else ""
+                            message = str(error.get('message', '未知错误'))
+                            f.write(f"{row_info} {id_info}: {message}\n")
+
+                print(f"错误报告已导出到临时文件: {temp_path}")
+                return temp_path
+            except Exception as temp_error:
+                print(f"临时文件写入也失败: {temp_error}")
+                return None
+
+        print(f"错误报告已导出到: {filepath}")
+        return filepath
+
+    except Exception as e:
+        print(f"导出错误报告失败: {e}")
+        import traceback
+        print(f"错误详情: {traceback.format_exc()}")
+        return None
 
 def main():
     # 用于直接运行此脚本进行测试
@@ -302,3 +437,40 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+def export_error_report_safe(errors, filename=None):
+    """安全版本的错误报告导出函数，增强错误处理"""
+    try:
+        return export_error_report(errors, filename)
+    except Exception as e:
+        print(f"错误报告生成失败: {e}")
+        print(f"错误详情: {traceback.format_exc()}")
+        
+        # 尝试使用最简单的方式生成报告
+        try:
+            import tempfile
+            import datetime
+            
+            # 创建临时文件
+            temp_fd, temp_path = tempfile.mkstemp(suffix='.txt', prefix='error_report_safe_')
+            
+            with os.fdopen(temp_fd, 'w', encoding='utf-8') as f:
+                f.write(f"错误报告 (安全模式) - {datetime.datetime.now()}\n")
+                f.write("="*50 + "\n")
+                f.write(f"总错误数: {len(errors) if errors else 0}\n\n")
+                
+                if errors:
+                    for i, error in enumerate(errors[:10]):  # 只显示前10个错误
+                        f.write(f"错误 {i+1}: {str(error)}\n")
+                    
+                    if len(errors) > 10:
+                        f.write(f"... 还有 {len(errors) - 10} 个错误\n")
+                else:
+                    f.write("没有错误。\n")
+            
+            print(f"安全模式错误报告已生成: {temp_path}")
+            return temp_path
+            
+        except Exception as safe_error:
+            print(f"安全模式也失败了: {safe_error}")
+            return None

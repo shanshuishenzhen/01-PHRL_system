@@ -10,7 +10,7 @@ import mimetypes
 import re
 import time
 from models import Base, Question, Paper, PaperQuestion, QuestionGroup, QuestionBank
-from excel_importer import import_questions_from_excel, export_error_report
+from excel_importer import import_questions_from_excel, export_error_report, export_error_report_safe
 from excel_exporter import export_db_questions_to_excel
 from paper_generator import PaperGenerator
 import datetime
@@ -31,7 +31,7 @@ CORS(app)
 
 # 数据库配置
 # 优先使用环境变量，没有则使用SQLite作为开发数据库
-DATABASE_URL = os.environ.get('DATABASE_URL', 'sqlite:///local_dev.db')
+DATABASE_URL = os.environ.get('DATABASE_URL', 'sqlite:///questions.db')
 
 try:
     engine = create_engine(DATABASE_URL)
@@ -68,7 +68,7 @@ def cleanup_old_files():
         filepath = os.path.join(upload_folder, filename)
         if os.path.isfile(filepath):
             # 检查文件是否超过24小时
-            if current_time - os.path.getmtime(filepath) > 24 * 3600:
+            if current_time - os.path.getmtime(filepath) >24 * 3600:
                 try:
                     os.remove(filepath)
                     print(f"已清理旧文件: {filename}")
@@ -262,8 +262,7 @@ index_template = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>题库管理系统</title>
-    <style>
-        body { 
+    <style>body { 
             font-family: 'Microsoft YaHei', sans-serif; 
             margin: 20px; 
             background-color: #f5f5f5;
@@ -472,42 +471,34 @@ index_template = """
 <body>
     <div class="container">
         <div class="header">
-            <h1>📚 题库管理系统</h1>
+            <h1>题库管理系统</h1>
             <p>专业的题库导入和管理平台</p>
         </div>
         <!-- 新增题库名称展示区 -->
         <div style="margin-bottom: 20px;">
-            <strong>题库列表：</strong>
-            {% if banks %}
+            <strong>题库列表：</strong>{% if banks %}
                 {% for b in banks %}
-                    <span style="display:inline-block;background:#e9ecef;color:#333;padding:4px 12px;margin:2px 6px 2px 0;border-radius:12px;">{{ b.name }}</span>
-                {% endfor %}
+                    <span style="display:inline-block;background:#e9ecef;color:#333;padding:4px 12px;margin:2px 6px 2px 0;border-radius:12px;">{{ b.name }}</span>{% endfor %}
             {% else %}
-                <span style="color:#aaa;">暂无题库</span>
-            {% endif %}
+                <span style="color:#aaa;">暂无题库</span>{% endif %}
         </div>
         
         <div style="text-align: center; margin-bottom: 20px;">
-            <a href="{{ url_for('handle_import_excel') }}" class="btn btn-success">📥 导入Excel题库</a>
-            <a href="{{ url_for('handle_import_sample') }}" class="btn btn-primary">📥 导入样例题库</a>
-            <a href="{{ url_for('download_template') }}" class="btn">📋 下载题库模板</a>
-            <a href="{{ url_for('index') }}" class="btn">🔄 刷新页面</a>
-            <a href="{{ url_for('handle_export_excel') }}" class="btn btn-success">📤 导出题库</a>
-            <a href="/browse" class="btn btn-warning">🔍 高级浏览</a>
-            <a href="/quick-generate" class="btn btn-primary">⚡ 快速生成</a>
-            <a href="/generate-paper" class="btn btn-warning">🎯 自定义组题</a>
-            <a href="/upload-paper-rule" class="btn btn-danger">🗂️ 上传组题规则</a>
-            <a href="/banks" class="btn btn-info">📚 题库管理</a>
-        </div>
-    
-    {% with messages = get_flashed_messages(with_categories=true) %}
+            <a href="{{ url_for('handle_import_excel') }}" class="btn btn-success">导入Excel题库</a>
+            <a href="{{ url_for('handle_import_sample') }}" class="btn btn-primary">导入样例题库</a>
+            <a href="{{ url_for('download_template') }}" class="btn">下载题库模板</a>
+            <a href="{{ url_for('index') }}" class="btn">刷新页面</a>
+            <a href="{{ url_for('handle_export_excel') }}" class="btn btn-success">导出题库</a>
+            <a href="/browse" class="btn btn-warning">高级浏览</a>
+            <a href="/quick-generate" class="btn btn-primary">快速生成</a>
+            <a href="/generate-paper" class="btn btn-warning">自定义组题</a>
+            <a href="/upload-paper-rule" class="btn btn-danger">上传组题规则</a>
+            <a href="/banks" class="btn btn-info">题库管理</a>
+        </div>{% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
-        <ul class=flashes>
-        {% for category, message in messages %}
-          <li class="{{ category }}">{{ message }}</li>
-        {% endfor %}
-        </ul>
-      {% endif %}
+        <ul class=flashes>{% for category, message in messages %}
+          <li class="{{ category }}">{{ message }}</li>{% endfor %}
+        </ul>{% endif %}
     {% endwith %}
 
         <div class="stats">
@@ -525,8 +516,7 @@ index_template = """
             </div>
         </div>
 
-        <h2>📋 题目列表 (第 {{ current_page }}/{{ total_pages }} 页，每页 {{ per_page }} 条)</h2>
-    {% if questions %}
+        <h2>题目列表 (第 {{ current_page }}/{{ total_pages }} 页，每页 {{ per_page }} 条)</h2>{% if questions %}
     <table>
         <thead>
                 <tr>
@@ -538,14 +528,12 @@ index_template = """
                     <th>创建时间</th>
                 </tr>
         </thead>
-        <tbody>
-        {% for q in questions %}
+        <tbody>{% for q in questions %}
             <tr>
                     <td><code>{{ q.id }}</code></td>
                     <td>{% if q.question_bank is not none %}{{ q.question_bank.name }}{% else %}未指定{% endif %}</td>
                 <td>{{ q.stem | truncate(100) }}</td>
-                    <td>
-                        {% if q.question_type_code == 'B（单选题）' %}单选题
+                    <td>{% if q.question_type_code == 'B（单选题）' %}单选题
                         {% elif q.question_type_code == 'G（多选题）' %}多选题
                         {% elif q.question_type_code == 'C（判断题）' %}判断题
                         {% elif q.question_type_code == 'T（填空题）' %}填空题
@@ -557,8 +545,7 @@ index_template = """
                         {% else %}{{ q.difficulty_code }}
                         {% endif %}
                     </td>
-                    <td>
-                        {% if q.difficulty_code == '1（很简单）' %}⭐ 很简单
+                    <td>{% if q.difficulty_code == '1（很简单）' %}⭐ 很简单
                         {% elif q.difficulty_code == '2（简单）' %}⭐⭐ 简单
                         {% elif q.difficulty_code == '3（中等）' %}⭐⭐⭐ 中等
                         {% elif q.difficulty_code == '4（困难）' %}⭐⭐⭐⭐ 困难
@@ -567,22 +554,17 @@ index_template = """
                         {% endif %}
                     </td>
                     <td>{{ q.created_at.strftime('%Y-%m-%d %H:%M') if q.created_at else 'N/A' }}</td>
-            </tr>
-        {% endfor %}
+            </tr>{% endfor %}
         </tbody>
-    </table>
-    {% else %}
+    </table>{% else %}
         <div style="text-align: center; padding: 40px 0; color: #6c757d;">
-            <h3>📭 暂无题目</h3>
+            <h3>暂无题目</h3>
             <p>数据库中还没有任何题目，请通过"导入"按钮添加。</p>
-        </div>
-    {% endif %}
+        </div>{% endif %}
 
-    <!-- 分页控件 -->
-    {% if total_pages > 1 %}
+    <!-- 分页控件 -->{% if total_pages >1 %}
     <div class="pagination-container">
-        <div class="pagination-info">
-            显示第 {{ (current_page-1) * per_page + 1 }} - {{ [current_page * per_page, total_questions] | min }} 条，共 {{ total_questions }} 条记录
+        <div class="pagination-info">显示第 {{ (current_page-1) * per_page + 1 }} - {{ [current_page * per_page, total_questions] | min }} 条，共 {{ total_questions }} 条记录
         </div>
 
         <div class="pagination-controls">
@@ -597,59 +579,42 @@ index_template = """
             </div>
 
             <div class="pagination-buttons">
-                <!-- 首页 -->
-                {% if current_page > 1 %}
-                <a href="?page=1&per_page={{ per_page }}" class="btn btn-outline-primary">首页</a>
-                {% endif %}
+                <!-- 首页 -->{% if current_page >1 %}
+                <a href="?page=1&per_page={{ per_page }}" class="btn btn-outline-primary">首页</a>{% endif %}
 
-                <!-- 上一页 -->
-                {% if current_page > 1 %}
-                <a href="?page={{ current_page - 1 }}&per_page={{ per_page }}" class="btn btn-outline-primary">上一页</a>
-                {% endif %}
+                <!-- 上一页 -->{% if current_page >1 %}
+                <a href="?page={{ current_page - 1 }}&per_page={{ per_page }}" class="btn btn-outline-primary">上一页</a>{% endif %}
 
-                <!-- 页码 -->
-                {% set start_page = [1, current_page - 2] | max %}
+                <!-- 页码 -->{% set start_page = [1, current_page - 2] | max %}
                 {% set end_page = [total_pages, current_page + 2] | min %}
 
-                {% if start_page > 1 %}
-                <a href="?page=1&per_page={{ per_page }}" class="btn btn-outline-secondary">1</a>
-                {% if start_page > 2 %}
-                <span class="pagination-ellipsis">...</span>
-                {% endif %}
+                {% if start_page >1 %}
+                <a href="?page=1&per_page={{ per_page }}" class="btn btn-outline-secondary">1</a>{% if start_page >2 %}
+                <span class="pagination-ellipsis">...</span>{% endif %}
                 {% endif %}
 
                 {% for page_num in range(start_page, end_page + 1) %}
                 {% if page_num == current_page %}
-                <span class="btn btn-primary">{{ page_num }}</span>
-                {% else %}
-                <a href="?page={{ page_num }}&per_page={{ per_page }}" class="btn btn-outline-secondary">{{ page_num }}</a>
-                {% endif %}
+                <span class="btn btn-primary">{{ page_num }}</span>{% else %}
+                <a href="?page={{ page_num }}&per_page={{ per_page }}" class="btn btn-outline-secondary">{{ page_num }}</a>{% endif %}
                 {% endfor %}
 
                 {% if end_page < total_pages %}
                 {% if end_page < total_pages - 1 %}
-                <span class="pagination-ellipsis">...</span>
-                {% endif %}
-                <a href="?page={{ total_pages }}&per_page={{ per_page }}" class="btn btn-outline-secondary">{{ total_pages }}</a>
-                {% endif %}
+                <span class="pagination-ellipsis">...</span>{% endif %}
+                <a href="?page={{ total_pages }}&per_page={{ per_page }}" class="btn btn-outline-secondary">{{ total_pages }}</a>{% endif %}
 
-                <!-- 下一页 -->
-                {% if current_page < total_pages %}
-                <a href="?page={{ current_page + 1 }}&per_page={{ per_page }}" class="btn btn-outline-primary">下一页</a>
-                {% endif %}
+                <!-- 下一页 -->{% if current_page < total_pages %}
+                <a href="?page={{ current_page + 1 }}&per_page={{ per_page }}" class="btn btn-outline-primary">下一页</a>{% endif %}
 
-                <!-- 末页 -->
-                {% if current_page < total_pages %}
-                <a href="?page={{ total_pages }}&per_page={{ per_page }}" class="btn btn-outline-primary">末页</a>
-                {% endif %}
+                <!-- 末页 -->{% if current_page < total_pages %}
+                <a href="?page={{ total_pages }}&per_page={{ per_page }}" class="btn btn-outline-primary">末页</a>{% endif %}
             </div>
         </div>
-    </div>
-    {% endif %}
+    </div>{% endif %}
 
     <!-- 分页功能 -->
-    <script>
-        function changePerPage(value) {
+    <script>function changePerPage(value) {
             const url = new URL(window.location);
             url.searchParams.set('per_page', value);
             url.searchParams.set('page', '1'); // 重置到第一页
@@ -693,8 +658,7 @@ index_template = """
         });
     </script>
 </body>
-</html>
-"""
+</html>"""
 
 import_form_template = """
 <!DOCTYPE html>
@@ -703,8 +667,7 @@ import_form_template = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>导入Excel题库</title>
-    <style>
-        body { 
+    <style>body { 
             font-family: 'Microsoft YaHei', sans-serif; 
             margin: 20px; 
             background-color: #f5f5f5;
@@ -782,21 +745,20 @@ import_form_template = """
 <body>
     <div class="container">
         <div class="header">
-            <h1>📥 导入Excel题库</h1>
+            <h1>导入Excel题库</h1>
             <p>请选择要导入的Excel文件</p>
         </div>
         
         <div class="info">
-            <h4>📋 文件要求：</h4>
+            <h4>文件要求：</h4>
             <ul>
                 <li>文件格式：.xlsx (Excel 2007及以上版本)</li>
                 <li>文件大小：不超过10MB</li>
                 <li>必需列：ID, 题库名称, 题型代码, 试题（题干）, 正确答案, 难度代码</li>
             </ul>
             <p style="margin-top: 15px;">
-                <strong>💡 提示：</strong>如果您不确定Excel文件格式，请先 
-                <a href="{{ url_for('download_template') }}" style="color: #007bff; text-decoration: underline;">下载题库模板</a> 
-                作为参考。
+                <strong>提示：</strong>如果您不确定Excel文件格式，请先 
+                <a href="{{ url_for('download_template') }}" style="color: #007bff; text-decoration: underline;">下载题库模板</a>作为参考。
             </p>
         </div>
         
@@ -805,7 +767,7 @@ import_form_template = """
                 <label for="file">选择Excel文件 (.xlsx):</label>
                 <input type="file" id="file" name="file" accept=".xlsx" required>
             </div>
-            <input type="submit" value="📤 上传并导入">
+            <input type="submit" value=" 上传并导入">
     </form>
         
         <div style="text-align: center;">
@@ -813,8 +775,7 @@ import_form_template = """
         </div>
     </div>
 </body>
-</html>
-"""
+</html>"""
 
 banks_template = """
 <!DOCTYPE html>
@@ -827,32 +788,25 @@ banks_template = """
         <input type="text" name="bank_name" required placeholder="输入新题库名称">
         <button type="submit">创建</button>
     </form>
-    <h2>现有题库</h2>
-    {% with messages = get_flashed_messages(with_categories=true) %}
+    <h2>现有题库</h2>{% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
-            <ul>{% for c, m in messages %}<li class="{{ c }}">{{ m|safe }}</li>{% endfor %}</ul>
-        {% endif %}
+            <ul>{% for c, m in messages %}<li class="{{ c }}">{{ m|safe }}</li>{% endfor %}</ul>{% endif %}
     {% endwith %}
     {% if banks %}
         <table border="1">
-            <tr><th>题库名称</th><th>创建时间</th><th>操作</th></tr>
-            {% for bank in banks %}
+            <tr><th>题库名称</th><th>创建时间</th><th>操作</th></tr>{% for bank in banks %}
             <tr>
                 <td>{{ bank.name }}</td>
                 <td>{{ bank.created_at.strftime('%Y-%m-%d %H:%M') if bank.created_at }}</td>
                 <td>
                     <form method="post" action="{{ url_for('delete_bank', bank_id=bank.id) }}" style="display:inline;" onsubmit="return confirm('确定要删除该题库吗？此操作会同时删除该题库下所有题目！');">
-                        <button type="submit">🗑️ 删除</button>
+                        <button type="submit">删除</button>
                     </form>
                 </td>
-            </tr>
-            {% endfor %}
-        </table>
-    {% else %}
-        <p>暂无题库。</p>
-    {% endif %}
-</body></html>
-"""
+            </tr>{% endfor %}
+        </table>{% else %}
+        <p>暂无题库。</p>{% endif %}
+</body></html>"""
 
 @app.route('/api/questions')
 def api_questions():
@@ -936,9 +890,9 @@ def api_questions():
             if q.id and '-' in q.id:
                 parts = q.id.split('-')
                 if len(parts) >= 3:
-                    q_dict['knowledge_point_l1'] = parts[1] if len(parts) > 1 else ''
-                    q_dict['knowledge_point_l2'] = f"{parts[1]}-{parts[2]}" if len(parts) > 2 else ''
-                    q_dict['knowledge_point_l3'] = f"{parts[1]}-{parts[2]}-{parts[3]}" if len(parts) > 3 else ''
+                    q_dict['knowledge_point_l1'] = parts[1] if len(parts) >1 else ''
+                    q_dict['knowledge_point_l2'] = f"{parts[1]}-{parts[2]}" if len(parts) >2 else ''
+                    q_dict['knowledge_point_l3'] = f"{parts[1]}-{parts[2]}-{parts[3]}" if len(parts) >3 else ''
 
             questions_data.append(q_dict)
 
@@ -1051,7 +1005,7 @@ def index():
         # 确保参数有效
         if page < 1:
             page = 1
-        if per_page < 1 or per_page > 100:
+        if per_page < 1 or per_page >100:
             per_page = 15
 
         # 获取统计信息
@@ -1060,7 +1014,7 @@ def index():
         total_banks = db.query(QuestionBank).count()
 
         # 计算分页信息
-        total_pages = (total_questions + per_page - 1) // per_page if total_questions > 0 else 1
+        total_pages = (total_questions + per_page - 1) // per_page if total_questions >0 else 1
         offset = (page - 1) * per_page
 
         # 获取当前页的题目
@@ -1100,11 +1054,11 @@ def handle_import_json():
     
     try:
         success_count, fail_count = import_questions_from_json(json_file_path, db)
-        if success_count > 0:
+        if success_count >0:
             flash(f"成功导入 {success_count} 道新的样例题目！", 'success')
         else:
             flash("没有新的样例题目需要导入，或所有题目ID已存在。", 'warning')
-        if fail_count > 0:
+        if fail_count >0:
             flash(f"有 {fail_count} 道题目导入失败，请检查服务器日志。", 'error')
 
     except Exception as e:
@@ -1117,6 +1071,9 @@ def handle_import_json():
 @app.route('/import-sample', methods=['GET'])
 def handle_import_sample():
     """处理从Excel文件导入样例题库的请求"""
+    current_project = session.get('current_project', 'default')
+    print(f"当前项目: {current_project}")
+    
     db = get_db()
     excel_file_path = os.path.join(os.path.dirname(__file__), 'questions_sample.xlsx')
     
@@ -1125,10 +1082,51 @@ def handle_import_sample():
         return redirect(url_for('index'))
     
     try:
+        print(f"开始导入样例题库到项目: {current_project}")
+        questions_added, errors = import_questions_from_excel(excel_file_path, db)
+        print(f"导入完成: 添加 {len(questions_added) if questions_added else 0} 个题目, {len(errors) if errors else 0} 个错误")
+        
+        if errors:
+            # 使用更安全的错误报告生成方式
+            try:
+                error_report_path = export_error_report_safe(errors, "sample_import_errors.txt")
+                if error_report_path and os.path.exists(error_report_path):
+                    error_link = f'<a href="/download_error_report/{os.path.basename(error_report_path)}" target="_blank">点击查看报告</a>'
+                    if questions_added:
+                        flash(f'成功导入 {len(questions_added)} 条样例题目，但有部分数据出错。{error_link}', 'warning')
+                    else:
+                        flash(f'导入失败，所有样例题目均有问题。{error_link}', 'error')
+                else:
+                    # 如果错误报告生成失败，仍然显示基本信息
+                    if questions_added:
+                        flash(f'成功导入 {len(questions_added)} 条样例题目，但有部分数据出错。错误报告生成失败。', 'warning')
+                    else:
+                        flash(f'导入失败，所有样例题目均有问题。错误报告生成失败。', 'error')
+            except Exception as report_error:
+                print(f"错误报告生成异常: {report_error}")
+                # 即使错误报告生成失败，也要显示导入结果
+                if questions_added:
+                    flash(f'成功导入 {len(questions_added)} 条样例题目，但有部分数据出错。', 'warning')
+                else:
+                    flash(f'导入失败，所有样例题目均有问题。', 'error')
+        elif questions_added:
+            flash(f'成功导入 {len(questions_added)} 条样例题目！', 'success')
+        else:
+            flash('未在样例题库中找到可导入的新题目。', 'info')
+            
+    except Exception as e:
+        print(f"导入异常详情: {traceback.format_exc()}")
+        flash(f"导入过程中发生未知错误: {e}", 'error')
+    finally:
+        close_db(db)
+        
+    return redirect(url_for('index'))
+    
+    try:
         questions_added, errors = import_questions_from_excel(excel_file_path, db)
         
         if errors:
-            error_report_path = export_error_report(errors, "sample_import_errors.txt")
+            error_report_path = export_error_report_safe(errors, "sample_import_errors.txt")
             error_link = f'<a href="/download_error_report/{os.path.basename(error_report_path)}" target="_blank">点击查看报告</a>'
             if questions_added:
                 flash(f'成功导入 {len(questions_added)} 条样例题目，但有部分数据出错。{error_link}', 'warning')
@@ -1169,7 +1167,7 @@ def handle_import_excel():
                 questions_added, errors = import_questions_from_excel(filepath, db_session)
                 
                 if errors:
-                    error_report_path = export_error_report(errors, filename)
+                    error_report_path = export_error_report_safe(errors, filename)
                     error_link = f'<a href="/download_error_report/{os.path.basename(error_report_path)}" target="_blank">点击查看报告</a>'
                     if questions_added:
                         flash(f'成功导入 {len(questions_added)} 条题目，但有部分数据出错。{error_link}', 'warning')
@@ -1281,7 +1279,7 @@ def generate_paper():
                 score = float(request.form.get(f'rule_{i}_score', 5.0))
                 section_name = request.form.get(f'rule_{i}_section', '')
                 
-                if question_type and difficulty and count > 0:
+                if question_type and difficulty and count >0:
                     rules.append({
                         'question_type': question_type,
                         'difficulty': difficulty,
@@ -1467,7 +1465,7 @@ def upload_paper_rule():
         num_sets = int(request.form.get('num_sets', 1))
         if num_sets < 1:
             num_sets = 1
-        if num_sets > 10:
+        if num_sets >10:
             num_sets = 10
         
         try:
@@ -1573,7 +1571,7 @@ def upload_paper_rule():
     <h2>上传试卷规则Excel</h2>
     <div style="margin-bottom: 20px;">
         <a href="/" class="btn">返回首页</a>
-        <a href="/download-paper-rule-template" class="btn btn-success" style="margin-bottom:16px;display:inline-block;">📥 下载组题规则模板</a>
+        <a href="/download-paper-rule-template" class="btn btn-success" style="margin-bottom:16px;display:inline-block;">下载组题规则模板</a>
     </div>
     <form method="post" enctype="multipart/form-data">
         <div class="form-group" style="margin-bottom: 1rem;">
@@ -1589,8 +1587,7 @@ def upload_paper_rule():
             <input type="file" id="file" name="file" accept=".xlsx" required>
         </div>
         <button type="submit" style="padding:10px 20px; border-radius:5px; border:none; background-color:#007bff; color:white; cursor:pointer; margin-top:10px;">上传并自动组卷</button>
-    </form>
-    ''')
+    </form>''')
 
 # 组题功能模板
 papers_template = """
@@ -1600,8 +1597,7 @@ papers_template = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>试卷管理 - 题库管理系统</title>
-    <style>
-        body {
+    <style>body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
             padding: 20px;
@@ -1759,27 +1755,25 @@ papers_template = """
 <body>
     <div class="container">
         <div class="header">
-            <h1>📋 试卷管理</h1>
+            <h1>试卷管理</h1>
             <p>管理和生成试卷</p>
         </div>
         
         <div class="nav" style="text-align: center; margin-bottom: 20px;">
-            <a href="/" class="active">🏠 首页</a>
-            <a href="/import-excel">📤 导入题库</a>
-            <a href="/papers">📋 试卷管理</a>
-            <a href="/quick-generate">⚡ 快速生成</a>
-            <a href="/generate-paper">🎯 自定义组题</a>
-            <a href="/upload-paper-rule" class="btn btn-danger">🗂️ 上传组题规则</a>
-            <a href="/banks" class="btn btn-info">📚 题库管理</a>
+            <a href="/" class="active">首页</a>
+            <a href="/import-excel">导入题库</a>
+            <a href="/papers">试卷管理</a>
+            <a href="/quick-generate">快速生成</a>
+            <a href="/generate-paper">自定义组题</a>
+            <a href="/upload-paper-rule" class="btn btn-danger">上传组题规则</a>
+            <a href="/banks" class="btn btn-info">题库管理</a>
         </div>
         
         <div class="content">
-            <div class="flash-messages">
-                {% with messages = get_flashed_messages(with_categories=true) %}
+            <div class="flash-messages">{% with messages = get_flashed_messages(with_categories=true) %}
                     {% if messages %}
                         {% for category, message in messages %}
-                            <div class="flash-message flash-{{ category }}">{{ message }}</div>
-                        {% endfor %}
+                            <div class="flash-message flash-{{ category }}">{{ message }}</div>{% endfor %}
                     {% endif %}
                 {% endwith %}
             </div>
@@ -1787,17 +1781,16 @@ papers_template = """
             <div class="actions">
                 <form id="batchForm" method="post" style="display:inline;">
                     <input type="hidden" name="paper_ids" id="batchPaperIds">
-                    <button type="button" class="btn btn-success" onclick="batchExportExcel()">📊 批量导出Excel</button>
-                    <button type="button" class="btn btn-primary" onclick="batchExportWord()">📄 批量导出Word</button>
-                    <button type="button" class="btn btn-danger" onclick="batchDelete()">🗑️ 批量删除</button>
+                    <button type="button" class="btn btn-success" onclick="batchExportExcel()">批量导出Excel</button>
+                    <button type="button" class="btn btn-primary" onclick="batchExportWord()">批量导出Word</button>
+                    <button type="button" class="btn btn-danger" onclick="batchDelete()">批量删除</button>
                 </form>
-                <a href="/quick-generate" class="btn btn-success">⚡ 快速生成</a>
-                <a href="/generate-paper" class="btn btn-primary">🎯 自定义组题</a>
+                <a href="/quick-generate" class="btn btn-success">快速生成</a>
+                <a href="/generate-paper" class="btn btn-primary">自定义组题</a>
             </div>
-            <script>
-            function getCheckedPaperIds() {
+            <script>function getCheckedPaperIds() {
                 let ids = [];
-                document.querySelectorAll('.paper-checkbox:checked').forEach(cb => ids.push(cb.value));
+                document.querySelectorAll('.paper-checkbox:checked').forEach(cb =>ids.push(cb.value));
                 return ids;
             }
             function batchExportExcel() {
@@ -1831,46 +1824,39 @@ papers_template = """
             </script>
             <div style="margin-bottom:10px;text-align:right;">
                 <input type="checkbox" id="checkAll" onclick="toggleAllPapers(this)"> <label for="checkAll">全选</label>
-            </div>
-            {% if papers %}
-            <div class="papers-grid">
-                {% for paper in papers %}
+            </div>{% if papers %}
+            <div class="papers-grid">{% for paper in papers %}
                 <div class="paper-card">
                     <input type="checkbox" class="paper-checkbox" value="{{ paper.id }}" style="float:right;transform:scale(1.3);margin-top:2px;">
                     <div class="paper-title">{{ paper.name }}</div>
-                    <div class="paper-info">
-                        {{ paper.description or '暂无描述' }}
+                    <div class="paper-info">{{ paper.description or '暂无描述' }}
                     </div>
                     <div class="paper-stats">
-                        <span>📊 总分: {{ paper.total_score }}分</span>
-                        <span>⏱️ 时长: {{ paper.duration }}分钟</span>
+                        <span>总分: {{ paper.total_score }}分</span>
+                        <span>时长: {{ paper.duration }}分钟</span>
                     </div>
                     <div class="paper-stats">
-                        <span>📅 创建: {{ paper.created_at.strftime('%Y-%m-%d %H:%M') if paper.created_at else 'N/A' }}</span>
-                        <span>🎯 难度: {{ paper.difficulty_level or '未设置' }}</span>
+                        <span>创建: {{ paper.created_at.strftime('%Y-%m-%d %H:%M') if paper.created_at else 'N/A' }}</span>
+                        <span>难度: {{ paper.difficulty_level or '未设置' }}</span>
                     </div>
                     <div class="paper-actions">
-                        <a href="/paper/{{ paper.id }}" class="btn btn-primary btn-sm">👁️ 查看</a>
-                        <a href="/paper/{{ paper.id }}/export" class="btn btn-success btn-sm">📥 导出</a>
-                        <a href="/paper/{{ paper.id }}/export_excel" class="btn btn-success btn-sm">📊 Excel导出</a>
+                        <a href="/paper/{{ paper.id }}" class="btn btn-primary btn-sm">查看</a>
+                        <a href="/paper/{{ paper.id }}/export" class="btn btn-success btn-sm">导出</a>
+                        <a href="/paper/{{ paper.id }}/export_excel" class="btn btn-success btn-sm">Excel导出</a>
                         <form method="POST" action="/paper/{{ paper.id }}/delete" style="display: inline;" onsubmit="return confirm('确定要删除这个试卷吗？')">
-                            <button type="submit" class="btn btn-danger btn-sm">🗑️ 删除</button>
+                            <button type="submit" class="btn btn-danger btn-sm">删除</button>
                         </form>
                     </div>
-                </div>
-                {% endfor %}
-            </div>
-            {% else %}
+                </div>{% endfor %}
+            </div>{% else %}
             <div class="empty-state">
-                <h3>📭 暂无试卷</h3>
+                <h3>暂无试卷</h3>
                 <p>还没有生成任何试卷，点击上方按钮开始创建吧！</p>
-            </div>
-            {% endif %}
+            </div>{% endif %}
         </div>
     </div>
 </body>
-</html>
-"""
+</html>"""
 
 generate_paper_template = """
 <!DOCTYPE html>
@@ -1879,8 +1865,7 @@ generate_paper_template = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>自定义组题 - 题库管理系统</title>
-    <style>
-        body {
+    <style>body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
             padding: 20px;
@@ -2045,27 +2030,25 @@ generate_paper_template = """
 <body>
     <div class="container">
         <div class="header">
-            <h1>🎯 自定义组题</h1>
+            <h1>自定义组题</h1>
             <p>根据规则自动生成试卷</p>
         </div>
         
         <div class="nav">
-            <a href="/" class="active">🏠 首页</a>
-            <a href="/import-excel">📤 导入题库</a>
-            <a href="/papers">📋 试卷管理</a>
-            <a href="/quick-generate">⚡ 快速生成</a>
-            <a href="/generate-paper" class="active">🎯 自定义组题</a>
-            <a href="/upload-paper-rule" class="btn btn-danger">🗂️ 上传组题规则</a>
-            <a href="/banks" class="btn btn-info">📚 题库管理</a>
+            <a href="/" class="active">首页</a>
+            <a href="/import-excel">导入题库</a>
+            <a href="/papers">试卷管理</a>
+            <a href="/quick-generate">快速生成</a>
+            <a href="/generate-paper" class="active">自定义组题</a>
+            <a href="/upload-paper-rule" class="btn btn-danger">上传组题规则</a>
+            <a href="/banks" class="btn btn-info">题库管理</a>
         </div>
         
         <div class="content">
-            <div class="flash-messages">
-                {% with messages = get_flashed_messages(with_categories=true) %}
+            <div class="flash-messages">{% with messages = get_flashed_messages(with_categories=true) %}
                     {% if messages %}
                         {% for category, message in messages %}
-                            <div class="flash-message flash-{{ category }}">{{ message }}</div>
-                        {% endfor %}
+                            <div class="flash-message flash-{{ category }}">{{ message }}</div>{% endfor %}
                     {% endif %}
                 {% endwith %}
             </div>
@@ -2103,7 +2086,7 @@ generate_paper_template = """
                 </div>
                 
                 <div class="rules-container">
-                    <h3>📋 组题规则</h3>
+                    <h3>组题规则</h3>
                     <div id="rulesList">
                         <!-- 规则项将在这里动态添加 -->
                     </div>
@@ -2111,8 +2094,8 @@ generate_paper_template = """
                 </div>
                 
                 <div class="form-group">
-                    <button type="submit" class="btn btn-primary">🚀 生成试卷</button>
-                    <a href="/papers" class="btn btn-danger">❌ 取消</a>
+                    <button type="submit" class="btn btn-primary">生成试卷</button>
+                    <a href="/papers" class="btn btn-danger">取消</a>
                 </div>
                 
                 <input type="hidden" id="rule_count" name="rule_count" value="0">
@@ -2120,8 +2103,7 @@ generate_paper_template = """
         </div>
     </div>
     
-    <script>
-        let ruleIndex = 0;
+    <script>let ruleIndex = 0;
         
         function addRule() {
             const rulesList = document.getElementById('rulesList');
@@ -2171,8 +2153,7 @@ generate_paper_template = """
                         <label>章节名称</label>
                         <input type="text" name="rule_${ruleIndex}_section" class="form-control" placeholder="如：单选题、多选题等">
                     </div>
-                </div>
-            `;
+                </div>`;
             rulesList.appendChild(ruleDiv);
             ruleIndex++;
             document.getElementById('rule_count').value = ruleIndex;
@@ -2185,7 +2166,7 @@ generate_paper_template = """
         
         function updateRuleNumbers() {
             const rules = document.querySelectorAll('.rule-item');
-            rules.forEach((rule, index) => {
+            rules.forEach((rule, index) =>{
                 rule.querySelector('.rule-title').textContent = `规则 ${index + 1}`;
             });
             ruleIndex = rules.length;
@@ -2198,8 +2179,7 @@ generate_paper_template = """
         };
     </script>
 </body>
-</html>
-"""
+</html>"""
 
 view_paper_template = """
 <!DOCTYPE html>
@@ -2208,8 +2188,7 @@ view_paper_template = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ paper.name }} - 题库管理系统</title>
-    <style>
-        body {
+    <style>body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
             padding: 20px;
@@ -2414,27 +2393,25 @@ view_paper_template = """
 <body>
     <div class="container">
         <div class="header">
-            <h1>📋 {{ paper.name }}</h1>
+            <h1>{{ paper.name }}</h1>
             <p>试卷详情</p>
         </div>
         
         <div class="nav">
-            <a href="/" class="active">🏠 首页</a>
-            <a href="/import-excel">📤 导入题库</a>
-            <a href="/papers">📋 试卷管理</a>
-            <a href="/quick-generate">⚡ 快速生成</a>
-            <a href="/generate-paper">🎯 自定义组题</a>
-            <a href="/upload-paper-rule" class="btn btn-danger">🗂️ 上传组题规则</a>
-            <a href="/banks" class="btn btn-info">📚 题库管理</a>
+            <a href="/" class="active">首页</a>
+            <a href="/import-excel">导入题库</a>
+            <a href="/papers">试卷管理</a>
+            <a href="/quick-generate">快速生成</a>
+            <a href="/generate-paper">自定义组题</a>
+            <a href="/upload-paper-rule" class="btn btn-danger">上传组题规则</a>
+            <a href="/banks" class="btn btn-info">题库管理</a>
         </div>
         
         <div class="content">
-            <div class="flash-messages">
-                {% with messages = get_flashed_messages(with_categories=true) %}
+            <div class="flash-messages">{% with messages = get_flashed_messages(with_categories=true) %}
                     {% if messages %}
                         {% for category, message in messages %}
-                            <div class="flash-message flash-{{ category }}">{{ message }}</div>
-                        {% endfor %}
+                            <div class="flash-message flash-{{ category }}">{{ message }}</div>{% endfor %}
                     {% endif %}
                 {% endwith %}
             </div>
@@ -2443,25 +2420,23 @@ view_paper_template = """
                 <div class="paper-title">{{ paper.name }}</div>
                 <div class="paper-meta">
                     <div class="meta-item">
-                        <span>📊 总分:</span>
+                        <span>总分:</span>
                         <span>{{ paper.total_score }}分</span>
                     </div>
                     <div class="meta-item">
-                        <span>⏱️ 时长:</span>
+                        <span>时长:</span>
                         <span>{{ paper.duration }}分钟</span>
                     </div>
                     <div class="meta-item">
-                        <span>🎯 难度:</span>
+                        <span>难度:</span>
                         <span>{{ paper.difficulty_level or '未设置' }}</span>
                     </div>
                     <div class="meta-item">
-                        <span>📅 创建:</span>
+                        <span>创建:</span>
                         <span>{{ paper.created_at.strftime('%Y-%m-%d %H:%M') if paper.created_at else 'N/A' }}</span>
                     </div>
-                </div>
-                {% if paper.description %}
-                <div class="paper-description">{{ paper.description }}</div>
-                {% endif %}
+                </div>{% if paper.description %}
+                <div class="paper-description">{{ paper.description }}</div>{% endif %}
             </div>
             
             <div class="stats-grid">
@@ -2484,51 +2459,43 @@ view_paper_template = """
             </div>
             
             <div class="questions-section">
-                <div class="section-title">📝 题目列表</div>
-                {% if paper_questions %}
+                <div class="section-title">题目列表</div>{% if paper_questions %}
                     {% for pq in paper_questions %}
                     <div class="question-item">
                         <div class="question-header">
                             <span class="question-number">第{{ pq.question_order }}题</span>
                             <span class="question-score">{{ pq.score }}分</span>
                         </div>
-                        <div class="question-stem">{{ pq.question.stem }}</div>
-                        {% if pq.question.option_a or pq.question.option_b or pq.question.option_c or pq.question.option_d or pq.question.option_e %}
-                        <div class="question-options">
-                            {% if pq.question.option_a %}<div class="option">A. {{ pq.question.option_a }}</div>{% endif %}
+                        <div class="question-stem">{{ pq.question.stem }}</div>{% if pq.question.option_a or pq.question.option_b or pq.question.option_c or pq.question.option_d or pq.question.option_e %}
+                        <div class="question-options">{% if pq.question.option_a %}<div class="option">A. {{ pq.question.option_a }}</div>{% endif %}
                             {% if pq.question.option_b %}<div class="option">B. {{ pq.question.option_b }}</div>{% endif %}
                             {% if pq.question.option_c %}<div class="option">C. {{ pq.question.option_c }}</div>{% endif %}
                             {% if pq.question.option_d %}<div class="option">D. {{ pq.question.option_d }}</div>{% endif %}
                             {% if pq.question.option_e %}<div class="option">E. {{ pq.question.option_e }}</div>{% endif %}
-                        </div>
-                        {% endif %}
+                        </div>{% endif %}
                         <div style="margin-top: 10px; color: #666; font-size: 0.9em;">
-                            <span>题型: {{ pq.question.question_type_code }}</span> | 
-                            <span>难度: {{ pq.question.difficulty_code }}</span>
-                            {% if pq.section_name %} | <span>章节: {{ pq.section_name }}</span>{% endif %}
+                            <span>题型: {{ pq.question.question_type_code }}</span>| 
+                            <span>难度: {{ pq.question.difficulty_code }}</span>{% if pq.section_name %} | <span>章节: {{ pq.section_name }}</span>{% endif %}
                         </div>
-                    </div>
-                    {% endfor %}
+                    </div>{% endfor %}
                 {% else %}
                     <div style="text-align: center; padding: 40px; color: #6c757d;">
-                        <h3>📭 暂无题目</h3>
+                        <h3>暂无题目</h3>
                         <p>这个试卷还没有添加任何题目。</p>
-                    </div>
-                {% endif %}
+                    </div>{% endif %}
             </div>
             
             <div class="actions">
-                <a href="/paper/{{ paper.id }}/export" class="btn btn-success">📥 导出试卷</a>
-                <a href="/papers" class="btn btn-primary">📋 返回列表</a>
+                <a href="/paper/{{ paper.id }}/export" class="btn btn-success">导出试卷</a>
+                <a href="/papers" class="btn btn-primary">返回列表</a>
                 <form method="POST" action="/paper/{{ paper.id }}/delete" style="display: inline;" onsubmit="return confirm('确定要删除这个试卷吗？')">
-                    <button type="submit" class="btn btn-danger">🗑️ 删除试卷</button>
+                    <button type="submit" class="btn btn-danger">删除试卷</button>
                 </form>
             </div>
         </div>
     </div>
 </body>
-</html>
-"""
+</html>"""
 
 quick_generate_template = """
 <!DOCTYPE html>
@@ -2537,8 +2504,7 @@ quick_generate_template = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>快速生成试卷 - 题库管理系统</title>
-    <style>
-        body {
+    <style>body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
             padding: 20px;
@@ -2691,27 +2657,25 @@ quick_generate_template = """
 <body>
     <div class="container">
         <div class="header">
-            <h1>⚡ 快速生成试卷</h1>
+            <h1>快速生成试卷</h1>
             <p>一键生成标准试卷</p>
         </div>
         
         <div class="nav">
-            <a href="/">🏠 首页</a>
-            <a href="/import-excel">📤 导入题库</a>
-            <a href="/papers">📋 试卷管理</a>
-            <a href="/quick-generate" class="active">⚡ 快速生成</a>
-            <a href="/generate-paper">🎯 自定义组题</a>
-            <a href="/upload-paper-rule" class="btn btn-danger">🗂️ 上传组题规则</a>
-            <a href="/banks" class="btn btn-info">📚 题库管理</a>
+            <a href="/">首页</a>
+            <a href="/import-excel">导入题库</a>
+            <a href="/papers">试卷管理</a>
+            <a href="/quick-generate" class="active">快速生成</a>
+            <a href="/generate-paper">自定义组题</a>
+            <a href="/upload-paper-rule" class="btn btn-danger">上传组题规则</a>
+            <a href="/banks" class="btn btn-info">题库管理</a>
         </div>
         
         <div class="content">
-            <div class="flash-messages">
-                {% with messages = get_flashed_messages(with_categories=true) %}
+            <div class="flash-messages">{% with messages = get_flashed_messages(with_categories=true) %}
                     {% if messages %}
                         {% for category, message in messages %}
-                            <div class="flash-message flash-{{ category }}">{{ message }}</div>
-                        {% endfor %}
+                            <div class="flash-message flash-{{ category }}">{{ message }}</div>{% endfor %}
                     {% endif %}
                 {% endwith %}
             </div>
@@ -2727,34 +2691,33 @@ quick_generate_template = """
                     <div class="difficulty-options">
                         <label class="difficulty-option" onclick="selectDifficulty('easy')">
                             <input type="radio" name="difficulty_distribution" value="easy">
-                            <div class="difficulty-title">😊 简单</div>
+                            <div class="difficulty-title">简单</div>
                             <div class="difficulty-desc">适合基础测试</div>
                         </label>
                         <label class="difficulty-option selected" onclick="selectDifficulty('balanced')">
                             <input type="radio" name="difficulty_distribution" value="balanced" checked>
-                            <div class="difficulty-title">⚖️ 平衡</div>
+                            <div class="difficulty-title">平衡</div>
                             <div class="difficulty-desc">标准难度分布</div>
                         </label>
                         <label class="difficulty-option" onclick="selectDifficulty('hard')">
                             <input type="radio" name="difficulty_distribution" value="hard">
-                            <div class="difficulty-title">😰 困难</div>
+                            <div class="difficulty-title">困难</div>
                             <div class="difficulty-desc">适合挑战性测试</div>
                         </label>
                     </div>
                 </div>
                 
                 <div class="form-group">
-                    <button type="submit" class="btn btn-primary">🚀 生成试卷</button>
-                    <a href="/papers" class="btn btn-danger">❌ 取消</a>
+                    <button type="submit" class="btn btn-primary">生成试卷</button>
+                    <a href="/papers" class="btn btn-danger">取消</a>
                 </div>
             </form>
         </div>
     </div>
     
-    <script>
-        function selectDifficulty(value) {
+    <script>function selectDifficulty(value) {
             // 移除所有选中状态
-            document.querySelectorAll('.difficulty-option').forEach(option => {
+            document.querySelectorAll('.difficulty-option').forEach(option =>{
                 option.classList.remove('selected');
             });
             
@@ -2766,8 +2729,7 @@ quick_generate_template = """
         }
     </script>
 </body>
-</html>
-"""
+</html>"""
 
 @app.route('/banks', methods=['GET', 'POST'])
 def manage_banks():
@@ -2976,7 +2938,7 @@ def export_papers_word():
                 sub_doc = generator.export_paper_to_docx(pid)
                 sub_doc.seek(0)
                 sub = Document(sub_doc)
-                if idx > 0:
+                if idx >0:
                     doc.add_page_break()
                 for element in sub.element.body:
                     doc.element.body.append(element)
@@ -3037,7 +2999,7 @@ def handle_export_excel():
         # 导出题库
         count = export_db_questions_to_excel(db, output_path)
         
-        if count > 0:
+        if count >0:
             # 返回文件下载
             return send_file(
                 output_path,
@@ -3054,3 +3016,7 @@ def handle_export_excel():
         return redirect(url_for('index'))
     finally:
         close_db(db)
+
+if __name__ == '__main__':
+    print("Starting Flask application...")
+    app.run(debug=True, host='0.0.0.0', port=5000)

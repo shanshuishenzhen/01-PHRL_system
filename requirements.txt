@@ -30,7 +30,7 @@ tk==0.1.0
 Pillow==11.2.1
 
 # 系统监控
-psutil==5.9.8
+psutil==7.0.0
 
 # 网络请求
 requests==2.32.3

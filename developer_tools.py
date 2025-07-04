@@ -54,7 +54,7 @@ class DeveloperTools:
         main_frame = ttk.Frame(self.root, padding=20)
         main_frame.pack(fill=tk.BOTH, expand=True)
 
-        title_label = ttk.Label(main_frame, text="🛠️ 数据生成助手", font=("Microsoft YaHei", 20, "bold"))
+        title_label = ttk.Label(main_frame, text="数据生成助手", font=("Microsoft YaHei", 20, "bold"))
         title_label.pack(pady=(0, 20))
 
         # 标签页
@@ -63,9 +63,9 @@ class DeveloperTools:
         user_tab = ttk.Frame(notebook)
         question_tab = ttk.Frame(notebook)
         danger_zone_tab = ttk.Frame(notebook)
-        notebook.add(user_tab, text="👤 用户生成")
-        notebook.add(question_tab, text="📝 样例题库生成")
-        notebook.add(danger_zone_tab, text="🔥 危险区域")
+        notebook.add(user_tab, text="用户生成")
+        notebook.add(question_tab, text="样例题库生成")
+        notebook.add(danger_zone_tab, text="危险区域")
 
         # 初始化变量
         self.uploaded_template_path = tk.StringVar()
@@ -109,7 +109,7 @@ class DeveloperTools:
         btn_container = ttk.Frame(generate_frame)
         btn_container.pack(fill="x", pady=10)
 
-        generate_btn = tk.Button(btn_container, text="🚀 生成样例题库", command=self.run_sample_generation, bg=self.colors['success'], fg='white', font=("Microsoft YaHei", 10, "bold"), relief="flat", padx=10, pady=5)
+        generate_btn = tk.Button(btn_container, text="生成样例题库", command=self.run_sample_generation, bg=self.colors['success'], fg='white', font=("Microsoft YaHei", 10, "bold"), relief="flat", padx=10, pady=5)
         generate_btn.pack(side="left", padx=(0, 10))
 
         # --- 4. 管理题库 ---
@@ -121,10 +121,10 @@ class DeveloperTools:
         manage_btn_container = ttk.Frame(manage_frame)
         manage_btn_container.pack(fill="x", pady=10)
 
-        view_btn = tk.Button(manage_btn_container, text="📋 查看题库", command=self.open_question_bank_manager, bg=self.colors['primary'], fg='white', relief="flat", padx=10)
+        view_btn = tk.Button(manage_btn_container, text="查看题库", command=self.open_question_bank_manager, bg=self.colors['primary'], fg='white', relief="flat", padx=10)
         view_btn.pack(side="left", padx=(0, 10))
 
-        delete_btn = tk.Button(manage_btn_container, text="🗑️ 删除样例题库", command=self.delete_sample_banks, bg=self.colors['danger'], fg='white', relief="flat", padx=10)
+        delete_btn = tk.Button(manage_btn_container, text="删除样例题库", command=self.delete_sample_banks, bg=self.colors['danger'], fg='white', relief="flat", padx=10)
         delete_btn.pack(side="left")
         
 
@@ -178,12 +178,21 @@ class DeveloperTools:
                 "生成模式选择",
                 "检测到已存在样例题库文件。\n\n"
                 "选择 '是' = 增量生成（如果题库名称不同则追加，相同则替换）\n"
-                "选择 '否' = 覆盖模式（完全替换现有文件）\n"
+                "选择 '否' = 覆盖模式（完全替换现有文件和数据库）\n"
                 "选择 '取消' = 取消操作"
             )
             if choice is None:  # 用户选择取消
                 return
             append_mode = choice  # True表示增量模式，False表示覆盖模式
+
+            # 如果是覆盖模式，先清理数据库中的样例题库数据
+            if not append_mode:
+                try:
+                    self._clear_sample_database()
+                    print("覆盖模式: 已清理数据库中的样例题库数据")
+                except Exception as e:
+                    print(f"清理数据库失败: {e}")
+                    # 继续执行，不中断生成过程
 
         try:
             result_data = generate_from_excel(template_path, SAMPLE_QUESTIONS_FILE, append_mode)
@@ -196,11 +205,10 @@ class DeveloperTools:
                 db_success = False
 
             mode_text = "增量生成" if append_mode else "覆盖生成"
-            db_status = "✅ 已同步到题库管理模块" if db_success else "⚠️ 仅保存为文件"
+            db_status = "[成功] 已同步到题库管理模块" if db_success else "[警告] 仅保存为文件"
 
             result = messagebox.askquestion("成功",
                 f"样例题库{mode_text}完毕！\n\n"
-                f"题库名称: {bank_name}\n"
                 f"共生成 {total_generated} 道题目\n"
                 f"文件保存: {SAMPLE_QUESTIONS_FILE}\n"
                 f"数据库状态: {db_status}\n\n"
@@ -216,14 +224,23 @@ class DeveloperTools:
                 # 启动Flask应用并导入样例题库
                 def start_flask_and_import():
                     try:
-                        command = f'start cmd /k "cd /d {os.path.dirname(flask_app_path)} && flask run"'
-                        process = subprocess.Popen(command, shell=True)
-                        
+                        # 使用Python直接启动，避免弹出cmd窗口
+                        import sys
+                        flask_dir = os.path.dirname(flask_app_path)
+
+                        # 在后台启动Flask应用
+                        process = subprocess.Popen([
+                            sys.executable, 'app.py'
+                        ], cwd=flask_dir,
+                           stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL,
+                           creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+
                         # 等待服务启动
                         time.sleep(3)
                         # 直接打开导入样例题库的URL
                         webbrowser.open_new("http://127.0.0.1:5000/import-sample")
-                        
+
                     except Exception as e:
                         messagebox.showerror("错误", f"启动题库管理失败: {e}")
                 
@@ -273,16 +290,32 @@ class DeveloperTools:
     def delete_sample_banks(self):
         """删除样例题库"""
         try:
+            # 1. 删除样例Excel文件
+            if os.path.exists(SAMPLE_QUESTIONS_FILE):
+                if messagebox.askyesno("确认删除",
+                    f"此操作将删除样例题库文件和数据库中的所有样例题库数据。\n\n"
+                    f"文件: {SAMPLE_QUESTIONS_FILE}\n\n"
+                    f"确定要继续吗？此操作不可撤销！"):
+
+                    try:
+                        os.remove(SAMPLE_QUESTIONS_FILE)
+                        print(f"已删除样例题库文件: {SAMPLE_QUESTIONS_FILE}")
+                    except Exception as e:
+                        print(f"删除样例题库文件失败: {e}")
+                else:
+                    return
+
+            # 2. 删除数据库中的样例题库数据
             # 导入数据库相关模块
-            sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'question_bank_web'))
+            sys.path.append(os.path.join(os.path.dirname(__file__), 'question_bank_web'))
 
             try:
                 from models import QuestionBank, Question
-                from sqlalchemy import create_engine
+                from sqlalchemy import create_engine, text
                 from sqlalchemy.orm import sessionmaker
 
-                # 连接数据库
-                db_path = os.path.join(os.path.dirname(__file__), '..', 'question_bank_web', 'local_dev.db')
+                # 连接到Web应用数据库（正确的路径）
+                db_path = os.path.join(os.path.dirname(__file__), 'question_bank_web', 'questions.db')
                 engine = create_engine(f'sqlite:///{db_path}')
                 Session = sessionmaker(bind=engine)
                 session = Session()
@@ -290,68 +323,103 @@ class DeveloperTools:
                 # 查找所有包含"样例题库"的题库
                 sample_banks = session.query(QuestionBank).filter(QuestionBank.name.like('%样例题库%')).all()
 
-                if not sample_banks:
-                    messagebox.showinfo("提示", "没有找到样例题库")
-                    return
+                if sample_banks:
+                    # 显示找到的样例题库
+                    bank_names = [bank.name for bank in sample_banks]
+                    bank_list = "\n".join([f"• {name}" for name in bank_names])
+                    print(f"找到样例题库:\n{bank_list}")
 
-                # 显示找到的样例题库
-                bank_names = [bank.name for bank in sample_banks]
-                bank_list = "\n".join([f"• {name}" for name in bank_names])
-
-                if messagebox.askyesno("确认删除",
-                    f"找到以下样例题库：\n\n{bank_list}\n\n"
-                    f"确定要删除这些题库及其所有题目吗？\n此操作不可撤销！"):
-
-                    # 删除题库
-                    deleted_count = 0
-                    for bank in sample_banks:
-                        session.delete(bank)
-                        deleted_count += 1
-
+                    # 强制删除所有样例题库数据
+                    session.execute(text("DELETE FROM questions WHERE question_bank_id IN (SELECT id FROM question_banks WHERE name LIKE '%样例题库%')"))
+                    session.execute(text("DELETE FROM question_banks WHERE name LIKE '%样例题库%'"))
                     session.commit()
-                    session.close()
 
-                    messagebox.showinfo("成功", f"已成功删除 {deleted_count} 个样例题库")
+                    print(f"已从数据库删除 {len(sample_banks)} 个样例题库")
+                else:
+                    print("数据库中没有找到样例题库")
+
+                session.close()
+                messagebox.showinfo("成功", "样例题库文件和数据库数据已全部清理完成！")
+
+            except ImportError as e:
+                print(f"无法导入数据库模块: {e}")
+                # 如果无法导入数据库模块，尝试直接操作SQLite
+                import sqlite3
+
+                db_path = os.path.join(os.path.dirname(__file__), 'question_bank_web', 'questions.db')
+                if os.path.exists(db_path):
+                    conn = sqlite3.connect(db_path)
+                    cursor = conn.cursor()
+
+                    # 查找样例题库
+                    cursor.execute("SELECT id, name FROM question_banks WHERE name LIKE '%样例题库%'")
+                    sample_banks = cursor.fetchall()
+
+                    if sample_banks:
+                        bank_list = "\n".join([f"• {name}" for _, name in sample_banks])
+                        print(f"找到样例题库:\n{bank_list}")
+
+                        # 删除题库（级联删除题目）
+                        cursor.execute("DELETE FROM questions WHERE question_bank_id IN (SELECT id FROM question_banks WHERE name LIKE '%样例题库%')")
+                        cursor.execute("DELETE FROM question_banks WHERE name LIKE '%样例题库%'")
+
+                        conn.commit()
+                        print(f"已从数据库删除 {len(sample_banks)} 个样例题库")
+                    else:
+                        print("数据库中没有找到样例题库")
+
+                    conn.close()
+                    messagebox.showinfo("成功", "样例题库文件和数据库数据已全部清理完成！")
+                else:
+                    print(f"数据库文件不存在: {db_path}")
+                    messagebox.showinfo("成功", "样例题库文件已删除，数据库文件不存在。")
+
+        except Exception as e:
+            messagebox.showerror("错误", f"删除样例题库失败: {e}")
+            print(f"删除样例题库失败: {e}")
+
+    def _clear_sample_database(self):
+        """清理数据库中的样例题库数据（内部方法）"""
+        try:
+            # 导入数据库相关模块
+            sys.path.append(os.path.join(os.path.dirname(__file__), 'question_bank_web'))
+
+            try:
+                from models import QuestionBank, Question
+                from sqlalchemy import create_engine, text
+                from sqlalchemy.orm import sessionmaker
+
+                # 连接到Web应用数据库
+                db_path = os.path.join(os.path.dirname(__file__), 'question_bank_web', 'questions.db')
+                engine = create_engine(f'sqlite:///{db_path}')
+                Session = sessionmaker(bind=engine)
+                session = Session()
+
+                # 删除所有样例题库数据
+                session.execute(text("DELETE FROM questions WHERE question_bank_id IN (SELECT id FROM question_banks WHERE name LIKE '%样例题库%')"))
+                session.execute(text("DELETE FROM question_banks WHERE name LIKE '%样例题库%'"))
+                session.commit()
+                session.close()
 
             except ImportError:
                 # 如果无法导入数据库模块，尝试直接操作SQLite
                 import sqlite3
 
-                db_path = os.path.join(os.path.dirname(__file__), '..', 'question_bank_web', 'local_dev.db')
-                if not os.path.exists(db_path):
-                    messagebox.showwarning("警告", "题库数据库文件不存在")
-                    return
+                db_path = os.path.join(os.path.dirname(__file__), 'question_bank_web', 'questions.db')
+                if os.path.exists(db_path):
+                    conn = sqlite3.connect(db_path)
+                    cursor = conn.cursor()
 
-                conn = sqlite3.connect(db_path)
-                cursor = conn.cursor()
-
-                # 查找样例题库
-                cursor.execute("SELECT id, name FROM question_banks WHERE name LIKE '%样例题库%'")
-                sample_banks = cursor.fetchall()
-
-                if not sample_banks:
-                    messagebox.showinfo("提示", "没有找到样例题库")
-                    conn.close()
-                    return
-
-                bank_list = "\n".join([f"• {name}" for _, name in sample_banks])
-
-                if messagebox.askyesno("确认删除",
-                    f"找到以下样例题库：\n\n{bank_list}\n\n"
-                    f"确定要删除这些题库及其所有题目吗？\n此操作不可撤销！"):
-
-                    # 删除题库（级联删除题目）
-                    for bank_id, _ in sample_banks:
-                        cursor.execute("DELETE FROM questions WHERE question_bank_id = ?", (bank_id,))
-                        cursor.execute("DELETE FROM question_banks WHERE id = ?", (bank_id,))
+                    # 删除样例题库数据
+                    cursor.execute("DELETE FROM questions WHERE question_bank_id IN (SELECT id FROM question_banks WHERE name LIKE '%样例题库%')")
+                    cursor.execute("DELETE FROM question_banks WHERE name LIKE '%样例题库%'")
 
                     conn.commit()
                     conn.close()
 
-                    messagebox.showinfo("成功", f"已成功删除 {len(sample_banks)} 个样例题库")
-
         except Exception as e:
-            messagebox.showerror("错误", f"删除样例题库失败: {e}")
+            print(f"清理数据库失败: {e}")
+            raise
 
     def create_user_generation_tab(self, parent):
         ttk.Label(parent, text="设置要生成的用户数量：", font=("Microsoft YaHei", 12)).pack(anchor="w")
@@ -365,7 +433,7 @@ class DeveloperTools:
             self.entries[key] = ttk.Entry(entry_frame)
             self.entries[key].grid(row=i, column=1, padx=5, pady=5)
             self.entries[key].insert(0, str(defaults.get(label_text, 0)))
-        generate_btn = tk.Button(parent, text="🚀 生成并追加用户", command=self.generate_users_gui, relief="flat", bg=self.colors['primary'], fg='white', font=("Microsoft YaHei", 10, "bold"))
+        generate_btn = tk.Button(parent, text="生成并追加用户", command=self.generate_users_gui, relief="flat", bg=self.colors['primary'], fg='white', font=("Microsoft YaHei", 10, "bold"))
         generate_btn.pack(pady=20)
         info_label = ttk.Label(parent, text="说明：此操作会保留现有用户，并在其基础上追加新用户。\n用户名将以'student_xxx', 'evaluator_xxx' 等形式生成。", justify="left")
         info_label.pack(anchor="w", pady=10)
@@ -374,10 +442,10 @@ class DeveloperTools:
         ttk.Label(parent, text="警告：以下操作会永久删除数据，请谨慎使用！", font=("Microsoft YaHei", 12, "bold"), foreground=self.colors['danger']).pack(anchor="w", pady=10)
         btn_frame = ttk.Frame(parent)
         btn_frame.pack(pady=20)
-        clear_users_btn = tk.Button(btn_frame, text="🔥 清空测试用户", command=self.clear_all_users, bg=self.colors['danger'], fg="white", font=("Microsoft YaHei", 10, "bold"), relief="flat", padx=10, pady=5)
+        clear_users_btn = tk.Button(btn_frame, text="清空测试用户", command=self.clear_all_users, bg=self.colors['danger'], fg="white", font=("Microsoft YaHei", 10, "bold"), relief="flat", padx=10, pady=5)
         clear_users_btn.pack(side="left", padx=10)
 
-        delete_questions_btn = tk.Button(btn_frame, text="🔥 删除样例题库", command=self.delete_sample_questions, bg=self.colors['danger'], fg="white", font=("Microsoft YaHei", 10, "bold"), relief="flat", padx=10, pady=5)
+        delete_questions_btn = tk.Button(btn_frame, text="删除样例题库", command=self.delete_sample_questions, bg=self.colors['danger'], fg="white", font=("Microsoft YaHei", 10, "bold"), relief="flat", padx=10, pady=5)
         delete_questions_btn.pack(side="left", padx=10)
 
     def generate_users_gui(self):

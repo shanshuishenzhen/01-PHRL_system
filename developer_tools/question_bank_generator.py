@@ -26,8 +26,8 @@ def get_question_bank_db_session():
         return None
 
     try:
-        # 题库管理模块的数据库路径
-        db_path = os.path.join(os.path.dirname(__file__), '..', 'question_bank_web', 'local_dev.db')
+        # 题库管理模块的数据库路径（使用正确的数据库文件名）
+        db_path = os.path.join(os.path.dirname(__file__), '..', 'question_bank_web', 'questions.db')
         engine = create_engine(f'sqlite:///{db_path}')
         Session = sessionmaker(bind=engine)
         return Session()
@@ -217,6 +217,8 @@ def generate_from_excel(excel_path, output_path, append_mode=False):
                     bank_name = original_name
                 break
 
+    print(f"将生成题库: {bank_name}")
+
     # 将生成的题目转换为Excel格式
     # 准备数据框架
     data = []
@@ -237,7 +239,7 @@ def generate_from_excel(excel_path, output_path, append_mode=False):
             'ID': q.get("id", ""),
             '序号': "",  # 添加序号字段
             '认定点代码': "-".join(q.get("id", "").split("-")[1:4]) + "-" + q.get("id", "").split("-")[4],  # 从ID中提取认定点代码
-            '题型代码': f"{q.get('type', '')}（{q.get('type_name', '').replace('组合题', '综合题') if q.get('type', '') == 'F' else q.get('type_name', '')}）",  # 修改为正确的格式
+            '题型代码': f"{q.get('type', '')}（{q.get('type_name', '').replace('组合题', '综合题')}）",  # 修改为正确的格式
             '题号': "",
             '试题（题干）': q.get("stem", ""),
             '试题（选项A）': option_a,
@@ -271,11 +273,14 @@ def generate_from_excel(excel_path, output_path, append_mode=False):
             new_df = pd.DataFrame(data)
             df_output = pd.concat([existing_df, new_df], ignore_index=True)
 
+            print(f"追加模式: 保留了 {len(existing_df)} 个现有题目，新增 {len(new_df)} 个题目")
+
         except Exception as e:
             print(f"读取现有文件失败，将创建新文件: {e}")
             df_output = pd.DataFrame(data)
     else:
         # 覆盖模式或文件不存在
+        print(f"覆盖模式: 将创建包含 {len(data)} 个题目的新文件")
         df_output = pd.DataFrame(data)
 
     # 导出为Excel，使用openpyxl引擎并处理编码
@@ -283,7 +288,7 @@ def generate_from_excel(excel_path, output_path, append_mode=False):
         df_output.to_excel(output_path, index=False, engine='openpyxl')
     except UnicodeEncodeError as e:
         # 如果遇到编码错误，尝试清理数据中的特殊字符
-        print(f"警告: 检测到编码问题，正在清理数据: {e}")
+        print("警告: 检测到编码问题，正在清理数据")
         for col in df_output.columns:
             if df_output[col].dtype == 'object':  # 字符串列
                 df_output[col] = df_output[col].astype(str).apply(
@@ -297,9 +302,9 @@ def generate_from_excel(excel_path, output_path, append_mode=False):
     if DB_INTEGRATION_AVAILABLE:
         db_success, db_message = save_to_question_bank_db(bank_name, all_questions)
         if db_success:
-            print(f"✅ {db_message}")
+            print(f"[成功] {db_message}")
         else:
-            print(f"⚠️ {db_message}")
+            print(f"[警告] {db_message}")
 
     # 同时保存一份JSON格式作为备份
     json_path = output_path.replace('.xlsx', '.json')
@@ -315,7 +320,7 @@ def generate_from_excel(excel_path, output_path, append_mode=False):
         with open(json_path, 'w', encoding='utf-8') as f:
             json.dump(backup_data, f, ensure_ascii=False, indent=2)
     except UnicodeEncodeError as e:
-        print(f"警告: JSON保存编码问题，使用ASCII模式: {e}")
+        print("警告: JSON保存编码问题，使用ASCII模式")
         with open(json_path, 'w', encoding='utf-8') as f:
             json.dump(backup_data, f, ensure_ascii=True, indent=2)
 
@@ -333,15 +338,15 @@ if __name__ == '__main__':
             result = generate_from_excel(excel_file, output_file)
             if len(result) == 3:
                 total_generated, bank_name, db_success = result
-                print(f"测试生成成功！题库名称: {bank_name}，共 {total_generated} 道题目。")
+                print(f"测试生成成功！共 {total_generated} 道题目。")
                 print(f"文件已保存至: {output_file}")
                 print(f"数据库保存: {'成功' if db_success else '失败'}")
             else:
                 # 兼容旧版本返回值
                 total_generated, bank_name = result
-                print(f"测试生成成功！题库名称: {bank_name}，共 {total_generated} 道题目。")
+                print(f"测试生成成功！共 {total_generated} 道题目。")
                 print(f"文件已保存至: {output_file}")
         except Exception as e:
-            print(f"测试生成失败: {e}")
+            print("测试生成失败")
     else:
-        print(f"错误: 模板文件不存在于 {excel_file}")
+        print("错误: 模板文件不存在")

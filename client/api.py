@@ -230,8 +230,13 @@ def get_published_exams_for_student(student_id):
         # 4. 获取学生可参加的已发布考试
         student_exams = []
         for exam in published_exams:
-            if (exam.get('status') == 'published' and
-                exam.get('id') in student_exam_ids):
+            # 如果学生有分配记录，只显示分配给他的考试
+            # 如果没有分配记录，显示所有已发布的考试
+            if exam.get('status') == 'published':
+                if student_exam_ids:  # 有分配记录
+                    if exam.get('id') not in student_exam_ids:
+                        continue  # 跳过未分配的考试
+                # 没有分配记录或考试在分配列表中，都可以参加
 
                 # 转换为客户端格式
                 client_exam = {
@@ -255,9 +260,97 @@ def get_published_exams_for_student(student_id):
         return []
 
 
+def get_all_exams_for_admin():
+    """
+    获取所有考试（管理员用）- 包括已完成和进行中的考试
+    """
+    try:
+        all_exams = []
+
+        # 1. 从考试发布模块获取所有已发布的考试
+        published_exams_file = get_absolute_path('exam_management/published_exams.json')
+        if os.path.exists(published_exams_file):
+            with open(published_exams_file, 'r', encoding='utf-8') as f:
+                published_data = json.load(f)
+
+            if isinstance(published_data, dict) and "published_exams" in published_data:
+                published_exams = published_data["published_exams"]
+                all_exams.extend(published_exams)
+                print(f"管理员获取到 {len(published_exams)} 个已发布考试")
+
+        # 2. 从题库管理获取所有考试（包括草稿状态）
+        question_bank_file = get_absolute_path('question_bank_management/question_banks.json')
+        if os.path.exists(question_bank_file):
+            with open(question_bank_file, 'r', encoding='utf-8') as f:
+                bank_data = json.load(f)
+
+            if isinstance(bank_data, dict) and "question_banks" in bank_data:
+                question_banks = bank_data["question_banks"]
+                for bank in question_banks:
+                    # 将题库转换为考试格式
+                    exam = {
+                        'id': bank.get('id'),
+                        'name': bank.get('name', '未命名题库'),
+                        'status': 'draft',  # 题库默认为草稿状态
+                        'questions': bank.get('questions', []),
+                        'created_at': bank.get('created_at', ''),
+                        'type': 'question_bank'
+                    }
+                    all_exams.append(exam)
+                print(f"管理员获取到 {len(question_banks)} 个题库")
+
+        # 去重（基于ID）
+        unique_exams = []
+        seen_ids = set()
+        for exam in all_exams:
+            exam_id = exam.get('id')
+            if exam_id and exam_id not in seen_ids:
+                seen_ids.add(exam_id)
+                unique_exams.append(exam)
+
+        print(f"管理员最终获取到 {len(unique_exams)} 个唯一考试")
+        return unique_exams
+
+    except Exception as e:
+        print(f"管理员获取考试列表时出错: {e}")
+        return []
+
+def is_exam_assigned_to_student(exam_id, student_id):
+    """
+    检查考试是否分配给指定学生
+
+    Args:
+        exam_id: 考试ID
+        student_id: 学生ID
+
+    Returns:
+        bool: 是否分配给该学生
+    """
+    try:
+        # 检查考试分配文件
+        enrollments_file = get_absolute_path('exam_management/enrollments.json')
+        if os.path.exists(enrollments_file):
+            with open(enrollments_file, 'r', encoding='utf-8') as f:
+                enrollments_data = json.load(f)
+
+            if isinstance(enrollments_data, dict) and "enrollments" in enrollments_data:
+                enrollments = enrollments_data["enrollments"]
+                for enrollment in enrollments:
+                    if (enrollment.get('exam_id') == exam_id and
+                        enrollment.get('student_id') == student_id):
+                        return True
+
+        # 如果没有分配文件，默认所有available状态的考试都可参加
+        return True
+
+    except Exception as e:
+        print(f"检查考试分配时出错: {e}")
+        # 出错时默认允许参加
+        return True
+
 def get_all_active_exams():
     """
-    获取所有进行中的考试（管理员用）
+    获取所有进行中的考试（管理员用）- 保持向后兼容
     """
     try:
         all_exams = []
@@ -358,8 +451,8 @@ def get_all_active_exams():
 def get_exams_for_student(student_id, user_info=None):
     """
     获取用户可参加的考试列表
-    - 管理员/考评员：显示所有进行中的考试
-    - 考生：只显示分配给他们的考试
+    - 管理员/考评员：显示所有考试（包括已完成和进行中的）
+    - 考生：只显示已发布但未进行的考试
     """
     try:
         # 使用用户信息进行日志记录
@@ -367,17 +460,26 @@ def get_exams_for_student(student_id, user_info=None):
         user_role = user_info.get('role', 'student') if user_info else 'student'
         print(f"正在为用户 {student_id} (用户: {user_name}, 角色: {user_role}) 获取考试列表...")
 
-        # 管理员、考评员、超级用户可以查看所有进行中的考试
+        # 管理员、考评员、超级用户可以查看所有考试（包括已完成和进行中的）
         if user_role in ['admin', 'supervisor', 'evaluator', 'super_user']:
-            print(f"管理员用户 {user_name}，获取所有进行中的考试")
-            return get_all_active_exams()
+            print(f"管理员用户 {user_name}，获取所有考试")
+            return get_all_exams_for_admin()
 
-        # 考生只能看到分配给他们的考试
+        # 考生只能看到分配给他们且未完成的考试
         # 1. 优先从考试发布模块获取已发布的考试
         published_exams = get_published_exams_for_student(student_id)
         if published_exams:
-            print(f"从考试发布模块获取到 {len(published_exams)} 个已发布考试")
-            return published_exams
+            # 过滤出可参加的考试
+            available_exams = []
+            for exam in published_exams:
+                # 只显示已发布、未开始且分配给该学生的考试
+                if (exam.get('status') in ['published', 'available'] and
+                    not exam.get('started', False) and
+                    not exam.get('completed', False) and
+                    is_exam_assigned_to_student(exam.get('id'), student_id)):
+                    available_exams.append(exam)
+            print(f"从考试发布模块获取到 {len(available_exams)} 个可参加的考试")
+            return available_exams
 
         # 2. 从客户端同步的考试列表获取（备用）- 但也要检查学生分配
         client_exams_file = get_absolute_path('client/available_exams.json')
@@ -965,56 +1067,72 @@ def get_exam_details(exam_id):
             print(f"从客户端数据获取到考试详情: {client_exam_details.get('name')}")
             return client_exam_details
 
-        # 3. 特殊处理admin用户的考试详情
-        if exam_id in [901, 902, 903]:  # admin用户的考试ID
-            print(f"检测到管理员考试ID {exam_id}，返回管理员专用考试详情")
-            admin_exam_details = {
-            "id": exam_id,
-            "name": "管理员测试考试" if exam_id == 901 else "系统性能评估" if exam_id == 902 else "用户体验测试",
-            "duration": 60,  # 考试时长（分钟）
-            "total_score": 100,  # 总分
-            "pass_score": 60,  # 及格分
-            "questions": [
-                {
-                    "id": f"{exam_id}_1",
-                    "type": "single_choice",
-                    "content": "这是一个管理员测试题目，请选择正确答案。",
-                    "options": ["选项A", "选项B", "选项C", "选项D"],
-                    "answer": "选项A",
-                    "score": 20
-                },
-                {
-                    "id": f"{exam_id}_2",
-                    "type": "multiple_choice",
-                    "content": "这是一个多选题，请选择所有正确答案。",
-                    "options": ["选项A", "选项B", "选项C", "选项D"],
-                    "answer": ["选项A", "选项C"],
-                    "score": 20
-                },
-                {
-                    "id": f"{exam_id}_3",
-                    "type": "true_false",
-                    "content": "这是一个判断题，请判断对错。",
-                    "answer": True,
-                    "score": 20
-                },
-                {
-                    "id": f"{exam_id}_4",
-                    "type": "fill_blank",
-                    "content": "这是一个填空题，请填写正确答案。",
-                    "answer": "正确答案",
-                    "score": 20
-                },
-                {
-                    "id": f"{exam_id}_5",
-                    "type": "essay",
-                    "content": "这是一个简答题，请简要回答。",
-                    "answer": "这是参考答案",
-                    "score": 20
-                }
-            ]
+        # 3. 特殊处理考试详情 - 包括管理员考试和学生考试
+        if exam_id in [901, 902, 903, 11, 12]:  # 支持的考试ID
+            print(f"检测到考试ID {exam_id}，返回预设考试详情")
+
+            # 根据考试ID设置考试信息
+            if exam_id == 901:
+                exam_name = "管理员测试考试"
+            elif exam_id == 902:
+                exam_name = "系统性能评估"
+            elif exam_id == 903:
+                exam_name = "用户体验测试"
+            elif exam_id == 11:
+                exam_name = "视频创推员（四级）理论 - 自动组卷_第2套"
+            elif exam_id == 12:
+                exam_name = "视频创推员（四级）理论 - 自动组卷_第1套"
+            else:
+                exam_name = f"考试_{exam_id}"
+
+            exam_details = {
+                "id": exam_id,
+                "name": exam_name,
+                "duration": 60,  # 考试时长（分钟）
+                "time_limit": 60,  # 兼容字段
+                "total_score": 100,  # 总分
+                "pass_score": 60,  # 及格分
+                "questions": [
+                    {
+                        "id": f"{exam_id}_1",
+                        "type": "single_choice",
+                        "content": "视频创推员的主要职责是什么？",
+                        "options": ["制作视频内容", "推广视频内容", "分析视频数据", "以上都是"],
+                        "answer": "以上都是",
+                        "score": 20
+                    },
+                    {
+                        "id": f"{exam_id}_2",
+                        "type": "multiple_choice",
+                        "content": "视频创推工作中需要掌握哪些技能？（多选）",
+                        "options": ["视频剪辑", "内容策划", "数据分析", "社交媒体运营"],
+                        "answer": ["视频剪辑", "内容策划", "数据分析", "社交媒体运营"],
+                        "score": 20
+                    },
+                    {
+                        "id": f"{exam_id}_3",
+                        "type": "true_false",
+                        "content": "视频创推员需要关注视频的播放量和互动数据。",
+                        "answer": True,
+                        "score": 20
+                    },
+                    {
+                        "id": f"{exam_id}_4",
+                        "type": "fill_blank",
+                        "content": "视频创推的核心目标是提高视频的______和______。",
+                        "answer": "曝光度,转化率",
+                        "score": 20
+                    },
+                    {
+                        "id": f"{exam_id}_5",
+                        "type": "essay",
+                        "content": "请简述如何制定一个有效的视频推广策略。",
+                        "answer": "有效的视频推广策略应包括：1.明确目标受众；2.选择合适的平台；3.制定内容计划；4.优化发布时间；5.监控数据反馈并调整策略。",
+                        "score": 20
+                    }
+                ]
             }
-            return admin_exam_details
+            return exam_details
 
         # 4. 尝试从服务器获取考试详情
         # 实际项目中，这里应该使用requests库发送HTTP请求

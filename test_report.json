@@ -1,0 +1,57 @@
+{
+  "start_time": "2025-07-03T10:47:49.917784",
+  "tests": {
+    "environment_setup": {
+      "status": "PASS",
+      "details": {
+        "python_venv": true,
+        "question_db": true,
+        "user_data": true,
+        "client_exams": true,
+        "exam_management": true
+      }
+    },
+    "database_content": {
+      "status": "PASS",
+      "details": {
+        "papers": 1,
+        "questions": 5,
+        "users": 26,
+        "test_users": [
+          "student",
+          "test"
+        ]
+      }
+    },
+    "exam_availability": {
+      "status": "PASS",
+      "details": {
+        "total_exams": 2,
+        "available_exams": 2
+      }
+    },
+    "user_authentication": {
+      "status": "PASS",
+      "details": {
+        "successful_logins": 3,
+        "total_attempts": 3
+      }
+    },
+    "data_flow": {
+      "status": "PASS",
+      "details": {
+        "exam_management/results": true,
+        "grading_center/queue": true,
+        "grading_center/graded": true,
+        "score_statistics": true
+      }
+    }
+  },
+  "overall_status": "PASS",
+  "end_time": "2025-07-03T10:47:49.930076",
+  "summary": {
+    "passed": 5,
+    "total": 5,
+    "pass_rate": "100.0%"
+  }
+}
