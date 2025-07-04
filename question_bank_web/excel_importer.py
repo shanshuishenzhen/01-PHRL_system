@@ -191,8 +191,8 @@ def import_questions_from_excel(filepath, db_session):
                 })
                 continue
 
-            # 创建唯一的数据库ID：原始ID + 题库ID
-            question_id_str = f"{original_id}#{bank_id}"
+            # 使用原始ID作为数据库ID（题库名称已经可以区分不同题库）
+            question_id_str = original_id
             
             # 从缓存获取 bank_id
             bank_id = bank_cache.get(bank_name)

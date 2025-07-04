@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template_string, render_template, redirect, url_for, flash, jsonify, send_file, send_from_directory
+from flask import Flask, request, render_template_string, render_template, redirect, url_for, flash, jsonify, send_file, send_from_directory, session
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, joinedload
 from werkzeug.utils import secure_filename
@@ -254,6 +254,23 @@ def sanitize_input(input_str):
     sanitized = re.sub(r'[;\'"\\]', '', input_str)
     return sanitized.strip()
 
+# 题型映射字典
+QUESTION_TYPE_MAP = {
+    'B': {'name': '单选题', 'class': 'type-single'},
+    'G': {'name': '多选题', 'class': 'type-multiple'},
+    'C': {'name': '判断题', 'class': 'type-judge'},
+    'T': {'name': '填空题', 'class': 'type-fill'},
+    'D': {'name': '简答题', 'class': 'type-short'},
+    'U': {'name': '计算题', 'class': 'type-calc'},
+    'W': {'name': '论述题', 'class': 'type-essay'},
+    'E': {'name': '案例分析题', 'class': 'type-case'},
+    'F': {'name': '综合题', 'class': 'type-comprehensive'}
+}
+
+def get_question_type_info(type_code):
+    """获取题型信息"""
+    return QUESTION_TYPE_MAP.get(type_code, {'name': '未知类型', 'class': 'type-single'})
+
 # 定义内联模板
 index_template = """
 <!DOCTYPE html>
@@ -326,19 +343,130 @@ index_template = """
         .btn-success:hover {
             background-color: #1e7e34;
         }
-        table { 
-            width: 100%; 
-            border-collapse: collapse; 
-            margin-top: 20px; 
+        /* 题目列表容器样式 */
+        .questions-container {
+            margin-top: 20px;
+        }
+
+        .questions-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .question-card {
+            background: white;
+            border: 1px solid #e9ecef;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .question-card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            transform: translateY(-2px);
+        }
+
+        .question-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 15px;
+        }
+
+        .question-id {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            background: #f8f9fa;
+            padding: 4px 8px;
+            border-radius: 4px;
+            color: #6c757d;
+            border: 1px solid #e9ecef;
+        }
+
+        .question-type-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+            color: white;
+        }
+
+        .type-single { background: #007bff; }
+        .type-multiple { background: #28a745; }
+        .type-judge { background: #ffc107; color: #212529; }
+        .type-fill { background: #17a2b8; }
+        .type-short { background: #6f42c1; }
+        .type-calc { background: #fd7e14; }
+        .type-essay { background: #e83e8c; }
+        .type-case { background: #20c997; }
+        .type-comprehensive { background: #6c757d; }
+
+        .question-content {
+            margin-bottom: 15px;
+        }
+
+        .question-stem {
+            font-size: 14px;
+            line-height: 1.5;
+            color: #333;
+            margin-bottom: 10px;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .question-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 15px;
+            border-top: 1px solid #f1f3f4;
+        }
+
+        .question-difficulty {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 13px;
+        }
+
+        .difficulty-stars {
+            color: #ffc107;
+        }
+
+        .question-bank-name {
+            font-size: 12px;
+            color: #6c757d;
+            background: #f8f9fa;
+            padding: 2px 8px;
+            border-radius: 12px;
+            border: 1px solid #e9ecef;
+        }
+
+        .question-date {
+            font-size: 12px;
+            color: #6c757d;
+        }
+
+        /* 表格样式保留用于其他页面 */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
             background: white;
         }
-        th, td { 
-            border: 1px solid #ddd; 
-            padding: 12px; 
-            text-align: left; 
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
         }
-        th { 
-            background-color: #f8f9fa; 
+        th {
+            background-color: #f8f9fa;
             font-weight: bold;
         }
         tr:nth-child(even) {
@@ -346,6 +474,30 @@ index_template = """
         }
         tr:hover {
             background-color: #e9ecef;
+        }
+
+        /* 空状态样式 */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #6c757d;
+            background: white;
+            border-radius: 12px;
+            border: 2px dashed #e9ecef;
+            margin-top: 20px;
+        }
+
+        .empty-state h3 {
+            margin-bottom: 10px;
+            color: #495057;
+        }
+
+        .empty-state p {
+            margin-bottom: 20px;
+        }
+
+        .empty-state .btn {
+            margin: 0 5px;
         }
         .stats {
             display: flex;
@@ -449,21 +601,266 @@ index_template = """
             border-color: #0056b3;
         }
         
+        /* 题库筛选器样式 */
+        .question-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+        }
+
+        .question-title {
+            margin: 0;
+            color: #495057;
+            font-size: 1.5em;
+        }
+
+        .bank-selector {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .bank-selector label {
+            font-weight: 500;
+            color: #495057;
+            white-space: nowrap;
+        }
+
+        .bank-selector select {
+            padding: 8px 12px;
+            border: 1px solid #ced4da;
+            border-radius: 6px;
+            background: white;
+            font-size: 14px;
+            cursor: pointer;
+            min-width: 200px;
+        }
+
+        .bank-selector select:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+        }
+
+        .bank-count {
+            color: #6c757d;
+            font-size: 0.9em;
+            margin-left: 5px;
+        }
+
+        /* 视图切换器样式 */
+        .view-switcher {
+            display: flex;
+            background: #f8f9fa;
+            border-radius: 6px;
+            padding: 2px;
+            border: 1px solid #e9ecef;
+        }
+
+        .view-btn {
+            padding: 8px 16px;
+            border: none;
+            background: transparent;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            color: #6c757d;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .view-btn:hover {
+            background: #e9ecef;
+            color: #495057;
+        }
+
+        .view-btn.active {
+            background: #007bff;
+            color: white;
+            box-shadow: 0 2px 4px rgba(0,123,255,0.3);
+        }
+
+        .view-btn span {
+            font-size: 16px;
+        }
+
+        /* 表格视图样式 */
+        .table-view {
+            display: none;
+            margin-top: 20px;
+        }
+
+        .table-view.active {
+            display: block;
+        }
+
+        .table-view table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .table-view th {
+            background: #f8f9fa;
+            padding: 15px 12px;
+            text-align: left;
+            font-weight: 600;
+            color: #495057;
+            border-bottom: 2px solid #e9ecef;
+        }
+
+        .table-view td {
+            padding: 12px;
+            border-bottom: 1px solid #f1f3f4;
+            vertical-align: top;
+        }
+
+        .table-view tr:hover {
+            background: #f8f9fa;
+        }
+
+        .table-view .question-id-cell {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            background: #f8f9fa;
+            padding: 4px 8px;
+            border-radius: 4px;
+            display: inline-block;
+        }
+
+        .table-view .question-stem-cell {
+            max-width: 300px;
+            line-height: 1.4;
+        }
+
+        .table-view .type-badge-small {
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+            color: white;
+            display: inline-block;
+        }
+
         /* 响应式设计 */
         @media (max-width: 768px) {
             .pagination-controls {
                 flex-direction: column;
                 align-items: center;
             }
-            
+
             .pagination-buttons {
                 justify-content: center;
             }
-            
+
             .pagination-buttons .btn {
                 padding: 6px 10px;
                 font-size: 13px;
                 min-width: 35px;
+            }
+
+            .question-header {
+                flex-direction: column;
+                gap: 15px;
+                align-items: stretch;
+            }
+
+            .question-header > div:last-child {
+                flex-direction: column;
+                gap: 15px;
+                align-items: stretch;
+            }
+
+            .view-switcher {
+                justify-content: center;
+            }
+
+            .view-btn {
+                flex: 1;
+                justify-content: center;
+            }
+
+            .bank-selector {
+                justify-content: center;
+            }
+
+            .bank-selector select {
+                min-width: 100%;
+            }
+
+            /* 题目卡片响应式 */
+            .questions-grid {
+                grid-template-columns: 1fr;
+                gap: 15px;
+            }
+
+            .question-card {
+                padding: 15px;
+            }
+
+            .question-header {
+                flex-direction: column;
+                gap: 10px;
+                align-items: flex-start;
+            }
+
+            .question-id {
+                font-size: 11px;
+                padding: 3px 6px;
+            }
+
+            .question-type-badge {
+                font-size: 11px;
+                padding: 3px 10px;
+            }
+
+            .question-stem {
+                font-size: 13px;
+                -webkit-line-clamp: 4;
+            }
+
+            .question-meta {
+                flex-direction: column;
+                gap: 10px;
+                align-items: flex-start;
+            }
+
+            .question-meta > div:last-child {
+                align-self: flex-end;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .questions-grid {
+                gap: 10px;
+            }
+
+            .question-card {
+                padding: 12px;
+            }
+
+            .question-stem {
+                font-size: 12px;
+                -webkit-line-clamp: 3;
+            }
+
+            .question-difficulty {
+                font-size: 12px;
+            }
+
+            .question-bank-name,
+            .question-date {
+                font-size: 11px;
             }
         }
     </style>
@@ -474,14 +871,7 @@ index_template = """
             <h1>题库管理系统</h1>
             <p>专业的题库导入和管理平台</p>
         </div>
-        <!-- 新增题库名称展示区 -->
-        <div style="margin-bottom: 20px;">
-            <strong>题库列表：</strong>{% if banks %}
-                {% for b in banks %}
-                    <span style="display:inline-block;background:#e9ecef;color:#333;padding:4px 12px;margin:2px 6px 2px 0;border-radius:12px;">{{ b.name }}</span>{% endfor %}
-            {% else %}
-                <span style="color:#aaa;">暂无题库</span>{% endif %}
-        </div>
+
         
         <div style="text-align: center; margin-bottom: 20px;">
             <a href="{{ url_for('handle_import_excel') }}" class="btn btn-success">导入Excel题库</a>
@@ -507,8 +897,12 @@ index_template = """
                 <div class="stat-label">当前页题目数</div>
             </div>
             <div class="stat-item">
-                <div class="stat-number">{{ total_questions }}</div>
-                <div class="stat-label">总题目数</div>
+                <div class="stat-number">{{ filtered_total if selected_bank_id else total_questions }}</div>
+                <div class="stat-label">{% if selected_bank_id %}筛选题目数{% else %}总题目数{% endif %}</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">{{ total_banks }}</div>
+                <div class="stat-label">题库数量</div>
             </div>
             <div class="stat-item">
                 <div class="stat-number">{{ total_pages }}</div>
@@ -516,55 +910,138 @@ index_template = """
             </div>
         </div>
 
-        <h2>题目列表 (第 {{ current_page }}/{{ total_pages }} 页，每页 {{ per_page }} 条)</h2>{% if questions %}
-    <table>
-        <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>题库名称</th>
-                    <th>题干</th>
-                    <th>题型</th>
-                    <th>难度</th>
-                    <th>创建时间</th>
-                </tr>
-        </thead>
-        <tbody>{% for q in questions %}
-            <tr>
-                    <td><code>{{ q.id }}</code></td>
-                    <td>{% if q.question_bank is not none %}{{ q.question_bank.name }}{% else %}未指定{% endif %}</td>
-                <td>{{ q.stem | truncate(100) }}</td>
-                    <td>{% if q.question_type_code == 'B（单选题）' %}单选题
-                        {% elif q.question_type_code == 'G（多选题）' %}多选题
-                        {% elif q.question_type_code == 'C（判断题）' %}判断题
-                        {% elif q.question_type_code == 'T（填空题）' %}填空题
-                        {% elif q.question_type_code == 'D（简答题）' %}简答题
-                        {% elif q.question_type_code == 'U（计算题）' %}计算题
-                        {% elif q.question_type_code == 'W（论述题）' %}论述题
-                        {% elif q.question_type_code == 'E（案例分析题）' %}案例分析
-                        {% elif q.question_type_code == 'F（综合题）' %}综合题
-                        {% else %}{{ q.difficulty_code }}
-                        {% endif %}
-                    </td>
-                    <td>{% if q.difficulty_code == '1（很简单）' %}⭐ 很简单
-                        {% elif q.difficulty_code == '2（简单）' %}⭐⭐ 简单
-                        {% elif q.difficulty_code == '3（中等）' %}⭐⭐⭐ 中等
-                        {% elif q.difficulty_code == '4（困难）' %}⭐⭐⭐⭐ 困难
-                        {% elif q.difficulty_code == '5（很难）' %}⭐⭐⭐⭐⭐ 很难
-                        {% else %}{{ q.difficulty_code }}
-                        {% endif %}
-                    </td>
-                    <td>{{ q.created_at.strftime('%Y-%m-%d %H:%M') if q.created_at else 'N/A' }}</td>
-            </tr>{% endfor %}
-        </tbody>
-    </table>{% else %}
-        <div style="text-align: center; padding: 40px 0; color: #6c757d;">
-            <h3>暂无题目</h3>
-            <p>数据库中还没有任何题目，请通过"导入"按钮添加。</p>
-        </div>{% endif %}
+        <!-- 题目列表标题和控制器 -->
+        <div class="question-header">
+            <h2 class="question-title">题目列表 (第 {{ current_page }}/{{ total_pages }} 页，每页 {{ per_page }} 条)</h2>
+            <div style="display: flex; align-items: center; gap: 20px;">
+                <!-- 视图切换器 -->
+                <div class="view-switcher">
+                    <button id="card-view-btn" class="view-btn active" onclick="switchView('card')">
+                        <span>📋</span> 卡片视图
+                    </button>
+                    <button id="table-view-btn" class="view-btn" onclick="switchView('table')">
+                        <span>📊</span> 表格视图
+                    </button>
+                </div>
+
+                <!-- 题库选择器 -->
+                <div class="bank-selector">
+                    <label for="bank-select">选择题库：</label>
+                    <select id="bank-select" onchange="filterByBank(this.value)">
+                        <option value="">全部题库 ({{ total_questions }})</option>
+                        {% for bank in banks_with_count %}
+                        <option value="{{ bank.id }}" {% if selected_bank_id == bank.id %}selected{% endif %}>
+                            {{ bank.name }} ({{ bank.question_count }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- 题目列表容器 -->
+        <div class="questions-container">{% if questions %}
+            <!-- 卡片视图 -->
+            <div id="card-view" class="questions-grid">{% for q in questions %}
+                <div class="question-card">
+                    <div class="question-header">
+                        <div class="question-id">{{ q.id.split('#')[0] if '#' in q.id else q.id }}</div>
+                        <div class="question-type-badge {{ get_question_type_info(q.question_type_code)['class'] }}">
+                            {{ get_question_type_info(q.question_type_code)['name'] }}
+                        </div>
+                    </div>
+
+                    <div class="question-content">
+                        <div class="question-stem">{{ q.stem }}</div>
+                    </div>
+
+                    <div class="question-meta">
+                        <div class="question-difficulty">
+                            <span class="difficulty-stars">
+                                {% if q.difficulty_code == '1（很简单）' %}⭐
+                                {% elif q.difficulty_code == '2（简单）' %}⭐⭐
+                                {% elif q.difficulty_code == '3（中等）' %}⭐⭐⭐
+                                {% elif q.difficulty_code == '4（困难）' %}⭐⭐⭐⭐
+                                {% elif q.difficulty_code == '5（很难）' %}⭐⭐⭐⭐⭐
+                                {% else %}⭐⭐⭐{% endif %}
+                            </span>
+                            <span>
+                                {% if q.difficulty_code == '1（很简单）' %}很简单
+                                {% elif q.difficulty_code == '2（简单）' %}简单
+                                {% elif q.difficulty_code == '3（中等）' %}中等
+                                {% elif q.difficulty_code == '4（困难）' %}困难
+                                {% elif q.difficulty_code == '5（很难）' %}很难
+                                {% else %}中等{% endif %}
+                            </span>
+                        </div>
+
+                        <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 5px;">
+                            <div class="question-bank-name">
+                                {% if q.question_bank is not none %}{{ q.question_bank.name }}{% else %}未指定{% endif %}
+                            </div>
+                            <div class="question-date">
+                                {{ q.created_at.strftime('%Y-%m-%d %H:%M') if q.created_at else 'N/A' }}
+                            </div>
+                        </div>
+                    </div>
+                </div>{% endfor %}
+            </div>
+
+            <!-- 表格视图 -->
+            <div id="table-view" class="table-view">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>题库名称</th>
+                            <th>题干</th>
+                            <th>题型</th>
+                            <th>难度</th>
+                            <th>创建时间</th>
+                        </tr>
+                    </thead>
+                    <tbody>{% for q in questions %}
+                        <tr>
+                            <td><span class="question-id-cell">{{ q.id.split('#')[0] if '#' in q.id else q.id }}</span></td>
+                            <td>{% if q.question_bank is not none %}{{ q.question_bank.name }}{% else %}未指定{% endif %}</td>
+                            <td class="question-stem-cell">{{ q.stem | truncate(100) }}</td>
+                            <td>
+                                <span class="type-badge-small {{ get_question_type_info(q.question_type_code)['class'] }}">
+                                    {{ get_question_type_info(q.question_type_code)['name'] }}
+                                </span>
+                            </td>
+                            <td>
+                                <span style="color: #ffc107;">
+                                    {% if q.difficulty_code == '1（很简单）' %}⭐
+                                    {% elif q.difficulty_code == '2（简单）' %}⭐⭐
+                                    {% elif q.difficulty_code == '3（中等）' %}⭐⭐⭐
+                                    {% elif q.difficulty_code == '4（困难）' %}⭐⭐⭐⭐
+                                    {% elif q.difficulty_code == '5（很难）' %}⭐⭐⭐⭐⭐
+                                    {% else %}⭐⭐⭐{% endif %}
+                                </span>
+                                {% if q.difficulty_code == '1（很简单）' %}很简单
+                                {% elif q.difficulty_code == '2（简单）' %}简单
+                                {% elif q.difficulty_code == '3（中等）' %}中等
+                                {% elif q.difficulty_code == '4（困难）' %}困难
+                                {% elif q.difficulty_code == '5（很难）' %}很难
+                                {% else %}中等{% endif %}
+                            </td>
+                            <td>{{ q.created_at.strftime('%Y-%m-%d %H:%M') if q.created_at else 'N/A' }}</td>
+                        </tr>{% endfor %}
+                    </tbody>
+                </table>
+            </div>{% else %}
+            <div class="empty-state">
+                <h3>暂无题目</h3>
+                <p>{% if selected_bank_id %}当前题库中还没有任何题目{% else %}数据库中还没有任何题目{% endif %}，请通过以下方式添加：</p>
+                <a href="{{ url_for('import_excel') }}" class="btn btn-primary">导入Excel题库</a>
+                <a href="{{ url_for('import_sample') }}" class="btn btn-success">导入样例题库</a>
+            </div>{% endif %}
+        </div>
 
     <!-- 分页控件 -->{% if total_pages >1 %}
     <div class="pagination-container">
-        <div class="pagination-info">显示第 {{ (current_page-1) * per_page + 1 }} - {{ [current_page * per_page, total_questions] | min }} 条，共 {{ total_questions }} 条记录
+        <div class="pagination-info">显示第 {{ (current_page-1) * per_page + 1 }} - {{ [current_page * per_page, filtered_total if selected_bank_id else total_questions] | min }} 条，共 {{ filtered_total if selected_bank_id else total_questions }} 条记录
         </div>
 
         <div class="pagination-controls">
@@ -580,46 +1057,85 @@ index_template = """
 
             <div class="pagination-buttons">
                 <!-- 首页 -->{% if current_page >1 %}
-                <a href="?page=1&per_page={{ per_page }}" class="btn btn-outline-primary">首页</a>{% endif %}
+                <a href="?page=1&per_page={{ per_page }}{% if selected_bank_id %}&bank_id={{ selected_bank_id }}{% endif %}" class="btn btn-outline-primary">首页</a>{% endif %}
 
                 <!-- 上一页 -->{% if current_page >1 %}
-                <a href="?page={{ current_page - 1 }}&per_page={{ per_page }}" class="btn btn-outline-primary">上一页</a>{% endif %}
+                <a href="?page={{ current_page - 1 }}&per_page={{ per_page }}{% if selected_bank_id %}&bank_id={{ selected_bank_id }}{% endif %}" class="btn btn-outline-primary">上一页</a>{% endif %}
 
                 <!-- 页码 -->{% set start_page = [1, current_page - 2] | max %}
                 {% set end_page = [total_pages, current_page + 2] | min %}
 
                 {% if start_page >1 %}
-                <a href="?page=1&per_page={{ per_page }}" class="btn btn-outline-secondary">1</a>{% if start_page >2 %}
+                <a href="?page=1&per_page={{ per_page }}{% if selected_bank_id %}&bank_id={{ selected_bank_id }}{% endif %}" class="btn btn-outline-secondary">1</a>{% if start_page >2 %}
                 <span class="pagination-ellipsis">...</span>{% endif %}
                 {% endif %}
 
                 {% for page_num in range(start_page, end_page + 1) %}
                 {% if page_num == current_page %}
                 <span class="btn btn-primary">{{ page_num }}</span>{% else %}
-                <a href="?page={{ page_num }}&per_page={{ per_page }}" class="btn btn-outline-secondary">{{ page_num }}</a>{% endif %}
+                <a href="?page={{ page_num }}&per_page={{ per_page }}{% if selected_bank_id %}&bank_id={{ selected_bank_id }}{% endif %}" class="btn btn-outline-secondary">{{ page_num }}</a>{% endif %}
                 {% endfor %}
 
                 {% if end_page < total_pages %}
                 {% if end_page < total_pages - 1 %}
                 <span class="pagination-ellipsis">...</span>{% endif %}
-                <a href="?page={{ total_pages }}&per_page={{ per_page }}" class="btn btn-outline-secondary">{{ total_pages }}</a>{% endif %}
+                <a href="?page={{ total_pages }}&per_page={{ per_page }}{% if selected_bank_id %}&bank_id={{ selected_bank_id }}{% endif %}" class="btn btn-outline-secondary">{{ total_pages }}</a>{% endif %}
 
                 <!-- 下一页 -->{% if current_page < total_pages %}
-                <a href="?page={{ current_page + 1 }}&per_page={{ per_page }}" class="btn btn-outline-primary">下一页</a>{% endif %}
+                <a href="?page={{ current_page + 1 }}&per_page={{ per_page }}{% if selected_bank_id %}&bank_id={{ selected_bank_id }}{% endif %}" class="btn btn-outline-primary">下一页</a>{% endif %}
 
                 <!-- 末页 -->{% if current_page < total_pages %}
-                <a href="?page={{ total_pages }}&per_page={{ per_page }}" class="btn btn-outline-primary">末页</a>{% endif %}
+                <a href="?page={{ total_pages }}&per_page={{ per_page }}{% if selected_bank_id %}&bank_id={{ selected_bank_id }}{% endif %}" class="btn btn-outline-primary">末页</a>{% endif %}
             </div>
         </div>
     </div>{% endif %}
 
-    <!-- 分页功能 -->
-    <script>function changePerPage(value) {
+    <!-- 分页、筛选和视图切换功能 -->
+    <script>
+        function changePerPage(value) {
             const url = new URL(window.location);
             url.searchParams.set('per_page', value);
             url.searchParams.set('page', '1'); // 重置到第一页
             window.location.href = url.toString();
         }
+
+        function filterByBank(bankId) {
+            const url = new URL(window.location);
+            if (bankId) {
+                url.searchParams.set('bank_id', bankId);
+            } else {
+                url.searchParams.delete('bank_id');
+            }
+            url.searchParams.set('page', '1'); // 重置到第一页
+            window.location.href = url.toString();
+        }
+
+        function switchView(viewType) {
+            const cardView = document.getElementById('card-view');
+            const tableView = document.getElementById('table-view');
+            const cardBtn = document.getElementById('card-view-btn');
+            const tableBtn = document.getElementById('table-view-btn');
+
+            if (viewType === 'card') {
+                cardView.style.display = 'grid';
+                tableView.style.display = 'none';
+                cardBtn.classList.add('active');
+                tableBtn.classList.remove('active');
+                localStorage.setItem('preferredView', 'card');
+            } else {
+                cardView.style.display = 'none';
+                tableView.style.display = 'block';
+                cardBtn.classList.remove('active');
+                tableBtn.classList.add('active');
+                localStorage.setItem('preferredView', 'table');
+            }
+        }
+
+        // 页面加载时恢复用户偏好的视图
+        document.addEventListener('DOMContentLoaded', function() {
+            const preferredView = localStorage.getItem('preferredView') || 'card';
+            switchView(preferredView);
+        });
         
         // 键盘快捷键支持
         document.addEventListener('keydown', function(e) {
@@ -995,12 +1511,13 @@ def api_question_detail(question_id):
 
 @app.route('/')
 def index():
-    """主页，显示题库统计和题目列表（支持分页）"""
+    """主页，显示题库统计和题目列表（支持分页和题库筛选）"""
     db = get_db()
     try:
         # 获取分页参数
         page = int(request.args.get('page', 1))
         per_page = int(request.args.get('per_page', 15))
+        selected_bank_id = request.args.get('bank_id', '')
 
         # 确保参数有效
         if page < 1:
@@ -1013,26 +1530,47 @@ def index():
         total_papers = db.query(Paper).count()
         total_banks = db.query(QuestionBank).count()
 
+        # 获取题库列表及其题目数量
+        banks_with_count = []
+        banks = db.query(QuestionBank).all()
+        for bank in banks:
+            question_count = db.query(Question).filter(Question.question_bank_id == bank.id).count()
+            banks_with_count.append({
+                'id': bank.id,
+                'name': bank.name,
+                'question_count': question_count
+            })
+
+        # 构建查询条件
+        query = db.query(Question)
+        if selected_bank_id:
+            query = query.filter(Question.question_bank_id == selected_bank_id)
+            # 重新计算筛选后的总数
+            filtered_total = query.count()
+        else:
+            filtered_total = total_questions
+
         # 计算分页信息
-        total_pages = (total_questions + per_page - 1) // per_page if total_questions >0 else 1
+        total_pages = (filtered_total + per_page - 1) // per_page if filtered_total >0 else 1
         offset = (page - 1) * per_page
 
         # 获取当前页的题目
-        questions = db.query(Question).order_by(Question.id.desc()).offset(offset).limit(per_page).all()
-
-        # 获取题库列表用于显示
-        banks = db.query(QuestionBank).all()
+        questions = query.order_by(Question.id.desc()).offset(offset).limit(per_page).all()
 
         return render_template_string(
             index_template,
             total_questions=total_questions,
+            filtered_total=filtered_total,
             total_papers=total_papers,
             total_banks=total_banks,
             banks=banks,
+            banks_with_count=banks_with_count,
             questions=questions,
             current_page=page,
             total_pages=total_pages,
-            per_page=per_page
+            per_page=per_page,
+            selected_bank_id=selected_bank_id,
+            get_question_type_info=get_question_type_info
         )
     finally:
         close_db(db)
@@ -1116,28 +1654,6 @@ def handle_import_sample():
             
     except Exception as e:
         print(f"导入异常详情: {traceback.format_exc()}")
-        flash(f"导入过程中发生未知错误: {e}", 'error')
-    finally:
-        close_db(db)
-        
-    return redirect(url_for('index'))
-    
-    try:
-        questions_added, errors = import_questions_from_excel(excel_file_path, db)
-        
-        if errors:
-            error_report_path = export_error_report_safe(errors, "sample_import_errors.txt")
-            error_link = f'<a href="/download_error_report/{os.path.basename(error_report_path)}" target="_blank">点击查看报告</a>'
-            if questions_added:
-                flash(f'成功导入 {len(questions_added)} 条样例题目，但有部分数据出错。{error_link}', 'warning')
-            else:
-                flash(f'导入失败，所有样例题目均有问题。{error_link}', 'error')
-        elif questions_added:
-            flash(f'成功导入 {len(questions_added)} 条样例题目！', 'success')
-        else:
-            flash('未在样例题库中找到可导入的新题目。', 'info')
-            
-    except Exception as e:
         flash(f"导入过程中发生未知错误: {e}", 'error')
     finally:
         close_db(db)
