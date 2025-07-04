@@ -19,7 +19,7 @@ def get_db():
     from sqlalchemy.orm import sessionmaker
 
     # 数据库配置
-    DATABASE_URL = "sqlite:///question_bank.db"
+    DATABASE_URL = "sqlite:///questions.db"
     engine = create_engine(DATABASE_URL, echo=False)
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

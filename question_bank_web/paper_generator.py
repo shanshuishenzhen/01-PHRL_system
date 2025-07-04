@@ -345,10 +345,10 @@ class PaperGenerator:
             count = rule['count']
             score = rule['score_per_question']
 
-            # 核心修改：通过JOIN和题库名称筛选题目
-            base_query = self.db_session.query(Question).join(QuestionBank).filter(
-                QuestionBank.name == bank_name,
-                Question.question_type_code.startswith(q_type)
+            # 核心修改：直接筛选题目，不依赖QuestionBank表
+            # 因为当前系统中所有题目都在同一个题库中
+            base_query = self.db_session.query(Question).filter(
+                Question.question_type_code == q_type
             )
             
             available_questions = base_query.all()
