@@ -62,9 +62,11 @@ class DeveloperTools:
         notebook.pack(fill=tk.BOTH, expand=True)
         user_tab = ttk.Frame(notebook)
         question_tab = ttk.Frame(notebook)
+        validation_tab = ttk.Frame(notebook)
         danger_zone_tab = ttk.Frame(notebook)
         notebook.add(user_tab, text="用户生成")
         notebook.add(question_tab, text="样例题库生成")
+        notebook.add(validation_tab, text="验证复核")
         notebook.add(danger_zone_tab, text="危险区域")
 
         # 初始化变量
@@ -73,6 +75,7 @@ class DeveloperTools:
         # 初始化各标签页
         self.create_user_generation_tab(user_tab)
         self.create_question_generation_tab(question_tab)
+        self.create_validation_tab(validation_tab)
         self.create_danger_zone_tab(danger_zone_tab)
         
     def create_question_generation_tab(self, parent):
@@ -503,6 +506,305 @@ class DeveloperTools:
             messagebox.showinfo("成功", f"操作完成！共删除了 {initial_count - final_count} 个用户。\n数据库已同步更新。")
         except Exception as e:
             messagebox.showerror("操作失败", str(e))
+
+    def create_validation_tab(self, parent):
+        """创建验证复核标签页"""
+        frame = ttk.Frame(parent, padding=20)
+        frame.pack(fill=tk.BOTH, expand=True)
+
+        # 标题
+        title_label = ttk.Label(frame, text="题库复核与组卷复核", font=("Microsoft YaHei", 16, "bold"))
+        title_label.pack(pady=(0, 20))
+
+        # --- 题库复核区域 ---
+        qb_frame = ttk.LabelFrame(frame, text="题库复核（题库生成验证）", padding=15)
+        qb_frame.pack(fill="x", pady=(0, 20))
+
+        ttk.Label(qb_frame, text="验证生成的题库是否符合蓝图规则要求", font=("Microsoft YaHei", 10)).pack(anchor="w", pady=(0, 10))
+
+        # 题库复核按钮区域
+        qb_btn_frame = ttk.Frame(qb_frame)
+        qb_btn_frame.pack(fill="x", pady=5)
+
+        # 自动验证按钮
+        auto_validate_btn = tk.Button(qb_btn_frame, text="生成题库并自动验证",
+                                    command=self.run_question_bank_generation_with_validation,
+                                    bg=self.colors['primary'], fg='white', relief="flat", padx=15, pady=5)
+        auto_validate_btn.pack(side="left", padx=(0, 10))
+
+        # 手动验证按钮
+        manual_validate_btn = tk.Button(qb_btn_frame, text="手动验证现有题库",
+                                      command=self.run_manual_question_bank_validation,
+                                      bg=self.colors['success'], fg='white', relief="flat", padx=15, pady=5)
+        manual_validate_btn.pack(side="left", padx=(0, 10))
+
+        # 题库验证状态显示
+        self.qb_validation_status = tk.StringVar(value="等待验证...")
+        status_label = ttk.Label(qb_frame, textvariable=self.qb_validation_status, foreground="gray")
+        status_label.pack(anchor="w", pady=(10, 0))
+
+        # 题库验证报告链接区域
+        self.qb_report_frame = ttk.Frame(qb_frame)
+        self.qb_report_frame.pack(fill="x", pady=(5, 0))
+
+        # --- 组卷复核区域 ---
+        paper_frame = ttk.LabelFrame(frame, text="组卷复核（试卷组题验证）", padding=15)
+        paper_frame.pack(fill="x", pady=(0, 20))
+
+        ttk.Label(paper_frame, text="分析试卷的三级代码分布和题型统计", font=("Microsoft YaHei", 10)).pack(anchor="w", pady=(0, 10))
+
+        # 组卷复核按钮区域
+        paper_btn_frame = ttk.Frame(paper_frame)
+        paper_btn_frame.pack(fill="x", pady=5)
+
+        # Web界面按钮
+        web_validate_btn = tk.Button(paper_btn_frame, text="打开Web验证界面",
+                                   command=self.open_paper_validation_web,
+                                   bg=self.colors['primary'], fg='white', relief="flat", padx=15, pady=5)
+        web_validate_btn.pack(side="left", padx=(0, 10))
+
+        # 批量验证按钮
+        batch_validate_btn = tk.Button(paper_btn_frame, text="批量验证试卷",
+                                     command=self.run_batch_paper_validation,
+                                     bg=self.colors['success'], fg='white', relief="flat", padx=15, pady=5)
+        batch_validate_btn.pack(side="left", padx=(0, 10))
+
+        # 组卷验证状态显示
+        self.paper_validation_status = tk.StringVar(value="等待验证...")
+        paper_status_label = ttk.Label(paper_frame, textvariable=self.paper_validation_status, foreground="gray")
+        paper_status_label.pack(anchor="w", pady=(10, 0))
+
+        # 组卷验证报告链接区域
+        self.paper_report_frame = ttk.Frame(paper_frame)
+        self.paper_report_frame.pack(fill="x", pady=(5, 0))
+
+        # --- 报告管理区域 ---
+        report_frame = ttk.LabelFrame(frame, text="验证报告管理", padding=15)
+        report_frame.pack(fill="x", pady=(0, 20))
+
+        ttk.Label(report_frame, text="管理和查看生成的验证报告", font=("Microsoft YaHei", 10)).pack(anchor="w", pady=(0, 10))
+
+        # 报告管理按钮
+        report_btn_frame = ttk.Frame(report_frame)
+        report_btn_frame.pack(fill="x", pady=5)
+
+        open_reports_btn = tk.Button(report_btn_frame, text="打开报告目录",
+                                   command=self.open_reports_directory,
+                                   bg=self.colors['primary'], fg='white', relief="flat", padx=15, pady=5)
+        open_reports_btn.pack(side="left", padx=(0, 10))
+
+        refresh_reports_btn = tk.Button(report_btn_frame, text="刷新报告列表",
+                                      command=self.refresh_validation_reports,
+                                      bg=self.colors['success'], fg='white', relief="flat", padx=15, pady=5)
+        refresh_reports_btn.pack(side="left", padx=(0, 10))
+
+        # 初始化报告列表
+        self.refresh_validation_reports()
+
+    def run_question_bank_generation_with_validation(self):
+        """运行题库生成并自动验证"""
+        try:
+            self.qb_validation_status.set("正在生成题库并验证...")
+
+            # 在新线程中运行，避免阻塞UI
+            def run_generation():
+                try:
+                    # 切换到developer_tools目录
+                    original_dir = os.getcwd()
+                    developer_tools_dir = os.path.join(project_root, "developer_tools")
+                    os.chdir(developer_tools_dir)
+
+                    # 运行题库生成器（会自动触发验证）
+                    result = subprocess.run([sys.executable, "question_bank_generator.py"],
+                                          capture_output=True, text=True, timeout=300)
+
+                    os.chdir(original_dir)
+
+                    if result.returncode == 0:
+                        self.qb_validation_status.set("✅ 题库生成和验证完成")
+                        self.refresh_validation_reports()
+                    else:
+                        self.qb_validation_status.set(f"❌ 生成失败: {result.stderr[:100]}")
+
+                except subprocess.TimeoutExpired:
+                    self.qb_validation_status.set("❌ 生成超时")
+                except Exception as e:
+                    self.qb_validation_status.set(f"❌ 生成错误: {str(e)[:100]}")
+
+            threading.Thread(target=run_generation, daemon=True).start()
+
+        except Exception as e:
+            messagebox.showerror("错误", f"启动题库生成失败: {e}")
+
+    def run_manual_question_bank_validation(self):
+        """手动验证现有题库"""
+        try:
+            # 选择蓝图文件
+            blueprint_path = filedialog.askopenfilename(
+                title="选择蓝图文件",
+                filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+                initialdir=os.path.join(project_root, "developer_tools")
+            )
+
+            if not blueprint_path:
+                return
+
+            # 选择生成的题库文件
+            generated_path = filedialog.askopenfilename(
+                title="选择生成的题库文件",
+                filetypes=[("Excel files", "*.xlsx"), ("JSON files", "*.json"), ("All files", "*.*")],
+                initialdir=os.path.join(project_root, "developer_tools")
+            )
+
+            if not generated_path:
+                return
+
+            self.qb_validation_status.set("正在验证题库...")
+
+            def run_validation():
+                try:
+                    original_dir = os.getcwd()
+                    developer_tools_dir = os.path.join(project_root, "developer_tools")
+                    os.chdir(developer_tools_dir)
+
+                    # 运行验证器
+                    result = subprocess.run([
+                        sys.executable, "question_bank_validator.py",
+                        blueprint_path, generated_path
+                    ], capture_output=True, text=True, timeout=120)
+
+                    os.chdir(original_dir)
+
+                    if result.returncode == 0:
+                        self.qb_validation_status.set("✅ 题库验证完成")
+                        self.refresh_validation_reports()
+                    else:
+                        self.qb_validation_status.set(f"❌ 验证失败: {result.stderr[:100]}")
+
+                except subprocess.TimeoutExpired:
+                    self.qb_validation_status.set("❌ 验证超时")
+                except Exception as e:
+                    self.qb_validation_status.set(f"❌ 验证错误: {str(e)[:100]}")
+
+            threading.Thread(target=run_validation, daemon=True).start()
+
+        except Exception as e:
+            messagebox.showerror("错误", f"启动题库验证失败: {e}")
+
+    def open_paper_validation_web(self):
+        """打开组卷验证Web界面"""
+        try:
+            url = "http://localhost:5000/validate-papers"
+            webbrowser.open(url)
+            self.paper_validation_status.set("✅ 已打开Web验证界面")
+        except Exception as e:
+            messagebox.showerror("错误", f"打开Web界面失败: {e}")
+
+    def run_batch_paper_validation(self):
+        """运行批量试卷验证"""
+        try:
+            self.paper_validation_status.set("正在批量验证试卷...")
+
+            def run_validation():
+                try:
+                    original_dir = os.getcwd()
+                    question_bank_dir = os.path.join(project_root, "question_bank_web")
+                    os.chdir(question_bank_dir)
+
+                    # 运行试卷验证测试
+                    result = subprocess.run([sys.executable, "test_paper_validation.py"],
+                                          capture_output=True, text=True, timeout=120)
+
+                    os.chdir(original_dir)
+
+                    if result.returncode == 0:
+                        self.paper_validation_status.set("✅ 批量验证完成")
+                        self.refresh_validation_reports()
+                    else:
+                        self.paper_validation_status.set(f"❌ 验证失败: {result.stderr[:100]}")
+
+                except subprocess.TimeoutExpired:
+                    self.paper_validation_status.set("❌ 验证超时")
+                except Exception as e:
+                    self.paper_validation_status.set(f"❌ 验证错误: {str(e)[:100]}")
+
+            threading.Thread(target=run_validation, daemon=True).start()
+
+        except Exception as e:
+            messagebox.showerror("错误", f"启动批量验证失败: {e}")
+
+    def open_reports_directory(self):
+        """打开验证报告目录"""
+        try:
+            # 打开题库验证报告目录
+            qb_reports_dir = os.path.join(project_root, "developer_tools", "validation_reports")
+            if os.path.exists(qb_reports_dir):
+                os.startfile(qb_reports_dir)
+
+            # 打开试卷验证报告目录
+            paper_reports_dir = os.path.join(project_root, "question_bank_web", "paper_validation_reports")
+            if os.path.exists(paper_reports_dir):
+                os.startfile(paper_reports_dir)
+
+        except Exception as e:
+            messagebox.showerror("错误", f"打开报告目录失败: {e}")
+
+    def refresh_validation_reports(self):
+        """刷新验证报告列表"""
+        try:
+            # 清除现有的报告链接
+            for widget in self.qb_report_frame.winfo_children():
+                widget.destroy()
+            for widget in self.paper_report_frame.winfo_children():
+                widget.destroy()
+
+            # 题库验证报告
+            qb_reports_dir = os.path.join(project_root, "developer_tools", "validation_reports")
+            if os.path.exists(qb_reports_dir):
+                qb_reports = [f for f in os.listdir(qb_reports_dir) if f.endswith('.xlsx')]
+                qb_reports.sort(key=lambda x: os.path.getmtime(os.path.join(qb_reports_dir, x)), reverse=True)
+
+                if qb_reports:
+                    ttk.Label(self.qb_report_frame, text="题库验证报告:", font=("Microsoft YaHei", 9, "bold")).pack(anchor="w")
+                    for i, report in enumerate(qb_reports[:3]):  # 只显示最新的3个报告
+                        report_path = os.path.join(qb_reports_dir, report)
+                        link_btn = tk.Button(self.qb_report_frame, text=f"📄 {report}",
+                                           command=lambda p=report_path: self.open_report_file(p),
+                                           bg="white", fg=self.colors['primary'], relief="flat",
+                                           cursor="hand2", anchor="w")
+                        link_btn.pack(anchor="w", pady=1)
+
+            # 试卷验证报告
+            paper_reports_dirs = [
+                os.path.join(project_root, "question_bank_web", "paper_validation_reports"),
+                os.path.join(project_root, "question_bank_web", "paper_validation_test_reports")
+            ]
+
+            all_paper_reports = []
+            for reports_dir in paper_reports_dirs:
+                if os.path.exists(reports_dir):
+                    reports = [(f, os.path.join(reports_dir, f)) for f in os.listdir(reports_dir) if f.endswith('.xlsx')]
+                    all_paper_reports.extend(reports)
+
+            if all_paper_reports:
+                all_paper_reports.sort(key=lambda x: os.path.getmtime(x[1]), reverse=True)
+                ttk.Label(self.paper_report_frame, text="试卷验证报告:", font=("Microsoft YaHei", 9, "bold")).pack(anchor="w")
+                for i, (report_name, report_path) in enumerate(all_paper_reports[:3]):  # 只显示最新的3个报告
+                    link_btn = tk.Button(self.paper_report_frame, text=f"📄 {report_name}",
+                                       command=lambda p=report_path: self.open_report_file(p),
+                                       bg="white", fg=self.colors['primary'], relief="flat",
+                                       cursor="hand2", anchor="w")
+                    link_btn.pack(anchor="w", pady=1)
+
+        except Exception as e:
+            print(f"刷新报告列表失败: {e}")
+
+    def open_report_file(self, file_path):
+        """打开验证报告文件"""
+        try:
+            os.startfile(file_path)
+        except Exception as e:
+            messagebox.showerror("错误", f"打开报告文件失败: {e}")
 
 def _generate_users_logic(student=0, evaluator=0, admin=0):
     if not os.path.exists(USER_DATA_FILE):
