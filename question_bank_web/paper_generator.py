@@ -328,49 +328,71 @@ class PaperGenerator:
         """
         核心组卷逻辑：根据题库、题型、知识点分布生成试卷
         """
-        paper = Paper(
-            name=paper_name,
-            description=kwargs.get('paper_description', f"基于知识点分布自动生成的试卷"),
-            total_score=kwargs.get('total_score', 100.0),
-            duration=kwargs.get('duration', 120),
-            difficulty_level=kwargs.get('difficulty_level', '中等'),
-        )
-        self.db_session.add(paper)
-        self.db_session.flush()
+        import time
+        from sqlalchemy.exc import OperationalError
 
-        question_order = 1
-        for rule in paper_structure:
-            bank_name = rule['question_bank_name']
-            q_type = rule['question_type']
-            count = rule['count']
-            score = rule['score_per_question']
+        # 重试机制，处理数据库锁定问题
+        max_retries = 3
+        retry_delay = 1
 
-            # 核心修改：直接筛选题目，不依赖QuestionBank表
-            # 因为当前系统中所有题目都在同一个题库中
-            base_query = self.db_session.query(Question).filter(
-                Question.question_type_code == q_type
-            )
-            
-            available_questions = base_query.all()
-            
-            if len(available_questions) < count:
-                raise ValueError(f"题库 '{bank_name}' 中题型 '{q_type}' 的题目不足。需要 {count} 道，但只有 {len(available_questions)} 道。")
-
-            selected_questions = random.sample(available_questions, count)
-
-            for q in selected_questions:
-                pq = PaperQuestion(
-                    paper_id=paper.id,
-                    question_id=q.id,
-                    question_order=question_order,
-                    score=score,
-                    section_name=f"{self._get_question_type_name(q_type)}"
+        for attempt in range(max_retries):
+            try:
+                paper = Paper(
+                    name=paper_name,
+                    description=kwargs.get('paper_description', f"基于知识点分布自动生成的试卷"),
+                    total_score=kwargs.get('total_score', 100.0),
+                    duration=kwargs.get('duration', 120),
+                    difficulty_level=kwargs.get('difficulty_level', '中等'),
                 )
-                self.db_session.add(pq)
-                question_order += 1
-        
-        self.db_session.commit()
-        return paper
+                self.db_session.add(paper)
+                self.db_session.flush()
+
+                question_order = 1
+                for rule in paper_structure:
+                    bank_name = rule['question_bank_name']
+                    q_type = rule['question_type']
+                    count = rule['count']
+                    score = rule['score_per_question']
+
+                    # 核心修改：直接筛选题目，不依赖QuestionBank表
+                    # 因为当前系统中所有题目都在同一个题库中
+                    base_query = self.db_session.query(Question).filter(
+                        Question.question_type_code == q_type
+                    )
+
+                    available_questions = base_query.all()
+
+                    if len(available_questions) < count:
+                        raise ValueError(f"题库 '{bank_name}' 中题型 '{q_type}' 的题目不足。需要 {count} 道，但只有 {len(available_questions)} 道。")
+
+                    selected_questions = random.sample(available_questions, count)
+
+                    for q in selected_questions:
+                        pq = PaperQuestion(
+                            paper_id=paper.id,
+                            question_id=q.id,
+                            question_order=question_order,
+                            score=score,
+                            section_name=f"{self._get_question_type_name(q_type)}"
+                        )
+                        self.db_session.add(pq)
+                        question_order += 1
+
+                self.db_session.commit()
+                return paper
+
+            except OperationalError as e:
+                if "database is locked" in str(e) and attempt < max_retries - 1:
+                    print(f"数据库锁定，第{attempt + 1}次重试...")
+                    self.db_session.rollback()
+                    time.sleep(retry_delay * (attempt + 1))
+                    continue
+                else:
+                    self.db_session.rollback()
+                    raise e
+            except Exception as e:
+                self.db_session.rollback()
+                raise e
 
     def export_paper_to_docx(self, paper_id: str):
         """将试卷导出为 DOCX 格式，包含题型分组和格式化标题"""
