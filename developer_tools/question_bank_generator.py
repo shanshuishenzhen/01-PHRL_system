@@ -79,8 +79,11 @@ def save_to_question_bank_db(bank_name, questions):
                 option_c = options.get('C', '')
                 option_d = options.get('D', '')
 
+            # 生成唯一的题目ID，格式为：原ID#题库UUID
+            unique_question_id = f"{q['id']}#{question_bank.id}"
+
             question = Question(
-                id=q['id'],
+                id=unique_question_id,
                 question_type_code=q['type'],
                 stem=q['stem'],
                 option_a=option_a,
@@ -328,11 +331,47 @@ def generate_from_excel(excel_path, output_path, append_mode=False):
     total_questions = len(all_questions)
     return total_questions, bank_name, db_success
 
+def run_validation(blueprint_path, generated_path):
+    """运行题库生成验证"""
+    try:
+        from question_bank_validator import QuestionBankValidator
+
+        validator = QuestionBankValidator()
+        validation_result = validator.validate_generated_bank(
+            blueprint_path, generated_path, "validation_reports"
+        )
+
+        print(f"\n{'='*50}")
+        print("题库生成自动验证结果")
+        print(f"{'='*50}")
+        print(f"验证状态: {'✓ 通过' if validation_result['is_valid'] else '✗ 失败'}")
+        print(f"准确率: {validation_result['accuracy_rate']:.2%}")
+        print(f"期望题目数: {validation_result['total_questions_expected']}")
+        print(f"实际题目数: {validation_result['total_questions_generated']}")
+        print(f"验证报告: {validation_result['report_path']}")
+
+        if validation_result['errors']:
+            print(f"\n发现 {len(validation_result['errors'])} 个错误:")
+            for i, error in enumerate(validation_result['errors'][:5], 1):
+                print(f"  {i}. {error}")
+            if len(validation_result['errors']) > 5:
+                print(f"  ... 还有 {len(validation_result['errors']) - 5} 个错误，详见报告")
+
+        return validation_result['is_valid']
+
+    except ImportError:
+        print("\n警告: 验证模块不可用，跳过自动验证")
+        return None
+    except Exception as e:
+        print(f"\n验证过程出错: {e}")
+        return False
+
 if __name__ == '__main__':
     # 用于直接测试脚本
     excel_file = os.path.join(os.path.dirname(__file__), '样例题组题规则模板.xlsx')
     output_file = os.path.join(os.path.dirname(__file__), '..', 'question_bank_web', 'questions_sample.xlsx')
-    
+    blueprint_file = os.path.join(os.path.dirname(__file__), 'question_bank_blueprint.json')
+
     if os.path.exists(excel_file):
         try:
             result = generate_from_excel(excel_file, output_file)
@@ -341,12 +380,27 @@ if __name__ == '__main__':
                 print(f"测试生成成功！共 {total_generated} 道题目。")
                 print(f"文件已保存至: {output_file}")
                 print(f"数据库保存: {'成功' if db_success else '失败'}")
+
+                # 自动运行验证
+                if os.path.exists(blueprint_file):
+                    json_output = output_file.replace('.xlsx', '.json')
+                    if os.path.exists(json_output):
+                        validation_passed = run_validation(blueprint_file, json_output)
+                        if validation_passed is True:
+                            print("\n🎉 题库生成和验证全部通过！")
+                        elif validation_passed is False:
+                            print("\n⚠️ 题库生成完成，但验证发现问题，请查看验证报告")
+                    else:
+                        print(f"\n警告: JSON备份文件不存在，跳过验证: {json_output}")
+                else:
+                    print(f"\n警告: 蓝图文件不存在，跳过验证: {blueprint_file}")
+
             else:
                 # 兼容旧版本返回值
                 total_generated, bank_name = result
                 print(f"测试生成成功！共 {total_generated} 道题目。")
                 print(f"文件已保存至: {output_file}")
         except Exception as e:
-            print("测试生成失败")
+            print(f"测试生成失败: {e}")
     else:
         print("错误: 模板文件不存在")

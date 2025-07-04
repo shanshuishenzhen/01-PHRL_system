@@ -271,6 +271,120 @@ def get_question_type_info(type_code):
     """获取题型信息"""
     return QUESTION_TYPE_MAP.get(type_code, {'name': '未知类型', 'class': 'type-single'})
 
+# 验证页面模板
+validate_papers_template = """
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>试卷组题验证</title>
+    <style>
+        body { font-family: 'Microsoft YaHei', sans-serif; margin: 20px; background-color: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .header { text-align: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 2px solid #007bff; }
+        .form-group { margin-bottom: 20px; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: bold; }
+        .form-control { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; }
+        .btn { padding: 10px 20px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; margin: 5px; }
+        .btn:hover { background-color: #0056b3; }
+        .btn-success { background-color: #28a745; }
+        .btn-success:hover { background-color: #1e7e34; }
+        .paper-list { max-height: 400px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 4px; }
+        .paper-item { padding: 10px; border-bottom: 1px solid #eee; display: flex; align-items: center; }
+        .paper-item:last-child { border-bottom: none; }
+        .paper-item input[type="checkbox"] { margin-right: 10px; }
+        .paper-info { flex: 1; }
+        .paper-name { font-weight: bold; color: #333; }
+        .paper-meta { font-size: 12px; color: #666; margin-top: 5px; }
+        .select-all { margin-bottom: 10px; }
+        .flashes { list-style-type: none; padding: 0; margin-bottom: 20px; }
+        .flashes li { margin-bottom: 10px; padding: 12px; border-radius: 6px; border-left: 4px solid; }
+        .flashes .error { background-color: #f8d7da; color: #721c24; border-color: #dc3545; }
+        .flashes .success { background-color: #d4edda; color: #155724; border-color: #28a745; }
+        .flashes .warning { background-color: #fff3cd; color: #856404; border-color: #ffc107; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>试卷组题验证</h1>
+            <p>分析试卷的三级代码比例分布，生成详细的对比报告</p>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <ul class="flashes">
+                    {% for category, message in messages %}
+                        <li class="{{ category }}">{{ message|safe }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        {% endwith %}
+
+        <form method="POST" enctype="multipart/form-data">
+            <div class="form-group">
+                <label>选择要验证的试卷：</label>
+                <div class="select-all">
+                    <label>
+                        <input type="checkbox" id="select-all" onchange="toggleAll(this)"> 全选/取消全选
+                    </label>
+                </div>
+                <div class="paper-list">
+                    {% for paper in papers %}
+                    <div class="paper-item">
+                        <input type="checkbox" name="paper_ids" value="{{ paper.id }}" class="paper-checkbox">
+                        <div class="paper-info">
+                            <div class="paper-name">{{ paper.name }}</div>
+                            <div class="paper-meta">
+                                ID: {{ paper.id }} |
+                                总分: {{ paper.total_score }}分 |
+                                时长: {{ paper.duration }}分钟 |
+                                创建时间: {{ paper.created_at.strftime('%Y-%m-%d %H:%M') if paper.created_at else 'N/A' }}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="template_file">组题模板文件（可选）：</label>
+                <input type="file" id="template_file" name="template_file" class="form-control" accept=".xlsx,.xls">
+                <small style="color: #666;">上传组题规则模板文件，用于对比分析。如不上传，将只生成试卷分布统计。</small>
+            </div>
+
+            <div style="text-align: center;">
+                <button type="submit" class="btn btn-success">开始验证</button>
+                <a href="{{ url_for('papers') }}" class="btn">返回试卷列表</a>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        function toggleAll(checkbox) {
+            const paperCheckboxes = document.querySelectorAll('.paper-checkbox');
+            paperCheckboxes.forEach(cb => cb.checked = checkbox.checked);
+        }
+
+        // 监听单个复选框变化，更新全选状态
+        document.addEventListener('DOMContentLoaded', function() {
+            const selectAllCheckbox = document.getElementById('select-all');
+            const paperCheckboxes = document.querySelectorAll('.paper-checkbox');
+
+            paperCheckboxes.forEach(checkbox => {
+                checkbox.addEventListener('change', function() {
+                    const checkedCount = document.querySelectorAll('.paper-checkbox:checked').length;
+                    selectAllCheckbox.checked = checkedCount === paperCheckboxes.length;
+                    selectAllCheckbox.indeterminate = checkedCount > 0 && checkedCount < paperCheckboxes.length;
+                });
+            });
+        });
+    </script>
+</body>
+</html>
+"""
+
 # 定义内联模板
 index_template = """
 <!DOCTYPE html>
@@ -2921,6 +3035,8 @@ view_paper_template = """
             <a href="/generate-paper">自定义组题</a>
             <a href="/upload-paper-rule" class="btn btn-danger">上传组题规则</a>
             <a href="/banks" class="btn btn-info">题库管理</a>
+            <a href="/validate-paper/{{ paper.id }}" style="background: #28a745; color: white;">验证试卷</a>
+            <a href="/validate-papers" style="background: #17a2b8; color: white;">批量验证</a>
         </div>
         
         <div class="content">
@@ -3296,6 +3412,93 @@ def download_paper_rule_template():
         df2.to_excel(writer, index=False, sheet_name='知识点分布')
     output.seek(0)
     return send_file(output, as_attachment=True, download_name='组题规则模板.xlsx', mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+@app.route('/validate-paper/<paper_id>')
+def validate_paper(paper_id):
+    """验证单套试卷的组题结果"""
+    try:
+        from paper_validator import PaperValidator
+
+        validator = PaperValidator()
+        result = validator.validate_paper_composition(paper_id, output_dir="paper_validation_reports")
+
+        if result["status"] == "success":
+            flash(f"试卷验证完成！报告已生成：{os.path.basename(result['report_path'])}", "success")
+            return redirect(url_for('view_paper', paper_id=paper_id))
+        else:
+            flash(f"验证失败：{result['message']}", "error")
+            return redirect(url_for('papers'))
+
+    except ImportError:
+        flash("验证模块不可用", "error")
+        return redirect(url_for('papers'))
+    except Exception as e:
+        flash(f"验证过程出错：{e}", "error")
+        return redirect(url_for('papers'))
+
+@app.route('/validate-papers', methods=['GET', 'POST'])
+def validate_papers():
+    """批量验证试卷页面"""
+    if request.method == 'POST':
+        try:
+            from paper_validator import PaperValidator
+
+            # 获取选中的试卷ID
+            paper_ids = request.form.getlist('paper_ids')
+            if not paper_ids:
+                flash("请至少选择一套试卷进行验证", "warning")
+                return redirect(url_for('validate_papers'))
+
+            # 获取模板文件（如果上传了）
+            template_path = None
+            if 'template_file' in request.files:
+                file = request.files['template_file']
+                if file and file.filename:
+                    filename = secure_filename(file.filename)
+                    template_path = os.path.join(app.config['UPLOAD_FOLDER'], f"template_{filename}")
+                    file.save(template_path)
+
+            # 执行批量验证
+            validator = PaperValidator()
+            result = validator.validate_multiple_papers(
+                paper_ids, template_path, "paper_validation_reports"
+            )
+
+            if result["status"] == "success":
+                flash(f"批量验证完成！共验证 {result['total_papers']} 套试卷，报告已生成：{os.path.basename(result['report_path'])}", "success")
+            else:
+                flash("批量验证失败", "error")
+
+        except ImportError:
+            flash("验证模块不可用", "error")
+        except Exception as e:
+            flash(f"验证过程出错：{e}", "error")
+
+        return redirect(url_for('validate_papers'))
+
+    # GET请求：显示验证页面
+    db = get_db()
+    try:
+        papers = db.query(Paper).order_by(Paper.created_at.desc()).limit(50).all()
+        return render_template_string(validate_papers_template, papers=papers)
+    finally:
+        close_db(db)
+
+@app.route('/download-validation-report/<filename>')
+def download_validation_report(filename):
+    """下载验证报告"""
+    try:
+        report_dir = "paper_validation_reports"
+        file_path = os.path.join(report_dir, filename)
+
+        if os.path.exists(file_path):
+            return send_file(file_path, as_attachment=True, download_name=filename)
+        else:
+            flash("报告文件不存在", "error")
+            return redirect(url_for('papers'))
+    except Exception as e:
+        flash(f"下载失败：{e}", "error")
+        return redirect(url_for('papers'))
 
 @app.route('/paper/<paper_id>/export_excel')
 def export_paper_excel(paper_id):

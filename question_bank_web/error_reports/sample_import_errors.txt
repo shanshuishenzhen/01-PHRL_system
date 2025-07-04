@@ -1,59 +1,8 @@
-导入错误报告 (2025-07-04 16:55:23)
+导入错误报告 (2025-07-05 00:04:21)
 ==================================================
-总错误数: 55
+总错误数: 1
 
-第 39 行 (ID: B-A-A-A-004-008_视频创推3): 未知错误: [Errno 22] Invalid argument
-第 250 行 (ID: W-A-A-B-002-004_视频创推3): 未知错误: [Errno 22] Invalid argument
-第 461 行 (ID: C-A-B-A-006-002_视频创推3): 未知错误: [Errno 22] Invalid argument
-第 672 行 (ID: E-A-B-A-008-005_视频创推3): 未知错误: [Errno 22] Invalid argument
-第 883 行 (ID: W-A-B-B-002-005_视频创推3): 未知错误: [Errno 22] Invalid argument
-第 1094 行 (ID: C-A-B-C-005-005_视频创推3): 未知错误: [Errno 22] Invalid argument
-第 1305 行 (ID: D-A-B-D-001-001_视频创推3): 未知错误: [Errno 22] Invalid argument
-第 1516 行 (ID: C-A-B-E-005-004_视频创推3): 未知错误: [Errno 22] Invalid argument
-第 1727 行 (ID: G-A-B-F-003-002_视频创推3): 未知错误: [Errno 22] Invalid argument
-第 1938 行 (ID: C-B-A-B-002-002_视频创推3): 未知错误: [Errno 22] Invalid argument
-第 2149 行 (ID: E-B-B-A-003-003_视频创推3): 未知错误: [Errno 22] Invalid argument
-第 2360 行 (ID: D-B-B-B-002-007_视频创推3): 未知错误: [Errno 22] Invalid argument
-第 2571 行 (ID: B-B-C-A-004-004_视频创推3): 未知错误: [Errno 22] Invalid argument
-第 2782 行 (ID: C-B-C-A-009-002_视频创推3): 未知错误: [Errno 22] Invalid argument
-第 2993 行 (ID: E-B-C-A-005-006_视频创推3): 未知错误: [Errno 22] Invalid argument
-第 3204 行 (ID: D-B-C-B-002-004_视频创推3): 未知错误: [Errno 22] Invalid argument
-第 3415 行 (ID: C-C-A-A-002-005_视频创推3): 未知错误: [Errno 22] Invalid argument
-第 3626 行 (ID: D-C-A-C-004-003_视频创推3): 未知错误: [Errno 22] Invalid argument
-第 3837 行 (ID: B-C-B-B-001-008_视频创推3): 未知错误: [Errno 22] Invalid argument
-第 4048 行 (ID: D-C-B-B-004-003_视频创推3): 未知错误: [Errno 22] Invalid argument
-第 4259 行 (ID: B-D-A-A-007-004_视频创推3): 未知错误: [Errno 22] Invalid argument
-第 4470 行 (ID: D-D-A-A-004-005_视频创推3): 未知错误: [Errno 22] Invalid argument
-第 4681 行 (ID: E-D-A-A-009-009_视频创推3): 未知错误: [Errno 22] Invalid argument
-第 4892 行 (ID: B-D-B-A-004-009_视频创推3): 未知错误: [Errno 22] Invalid argument
-第 5103 行 (ID: D-D-B-A-006-007_视频创推3): 未知错误: [Errno 22] Invalid argument
-第 5314 行 (ID: B-D-B-B-009-002_视频创推3): 未知错误: [Errno 22] Invalid argument
-第 5525 行 (ID: D-D-B-B-005-007_视频创推3): 未知错误: [Errno 22] Invalid argument
-第 5736 行 (ID: B-A-A-A-002-001_保卫管理3): 未知错误: [Errno 22] Invalid argument
-第 5947 行 (ID: D-A-A-B-002-002_保卫管理3): 未知错误: [Errno 22] Invalid argument
-第 6158 行 (ID: C-A-B-A-002-007_保卫管理3): 未知错误: [Errno 22] Invalid argument
-第 6369 行 (ID: E-A-B-A-005-002_保卫管理3): 未知错误: [Errno 22] Invalid argument
-第 6580 行 (ID: D-A-B-B-005-006_保卫管理3): 未知错误: [Errno 22] Invalid argument
-第 6791 行 (ID: C-A-B-C-001-002_保卫管理3): 未知错误: [Errno 22] Invalid argument
-第 7002 行 (ID: G-A-B-D-005-004_保卫管理3): 未知错误: [Errno 22] Invalid argument
-第 7213 行 (ID: C-A-B-E-001-005_保卫管理3): 未知错误: [Errno 22] Invalid argument
-第 7424 行 (ID: B-A-B-F-003-006_保卫管理3): 未知错误: [Errno 22] Invalid argument
-第 7635 行 (ID: B-B-A-B-004-004_保卫管理3): 未知错误: [Errno 22] Invalid argument
-第 7846 行 (ID: W-B-B-A-003-001_保卫管理3): 未知错误: [Errno 22] Invalid argument
-第 8057 行 (ID: C-B-B-B-007-004_保卫管理3): 未知错误: [Errno 22] Invalid argument
-第 8268 行 (ID: B-B-C-A-001-007_保卫管理3): 未知错误: [Errno 22] Invalid argument
-第 8479 行 (ID: C-B-C-A-006-002_保卫管理3): 未知错误: [Errno 22] Invalid argument
-第 8690 行 (ID: E-B-C-A-002-006_保卫管理3): 未知错误: [Errno 22] Invalid argument
-第 8901 行 (ID: C-B-C-B-005-005_保卫管理3): 未知错误: [Errno 22] Invalid argument
-第 9112 行 (ID: G-C-A-A-002-003_保卫管理3): 未知错误: [Errno 22] Invalid argument
-第 9323 行 (ID: C-C-A-C-001-004_保卫管理3): 未知错误: [Errno 22] Invalid argument
-第 9534 行 (ID: E-C-B-A-002-001_保卫管理3): 未知错误: [Errno 22] Invalid argument
-第 9745 行 (ID: C-C-B-B-008-008_保卫管理3): 未知错误: [Errno 22] Invalid argument
-第 9956 行 (ID: B-D-A-A-003-005_保卫管理3): 未知错误: [Errno 22] Invalid argument
-第 10167 行 (ID: D-D-A-A-001-005_保卫管理3): 未知错误: [Errno 22] Invalid argument
-第 10378 行 (ID: E-D-A-A-006-009_保卫管理3): 未知错误: [Errno 22] Invalid argument
-第 10589 行 (ID: B-D-B-A-001-009_保卫管理3): 未知错误: [Errno 22] Invalid argument
-第 10800 行 (ID: D-D-B-A-003-004_保卫管理3): 未知错误: [Errno 22] Invalid argument
-第 11011 行 (ID: B-D-B-B-005-007_保卫管理3): 未知错误: [Errno 22] Invalid argument
-第 11222 行 (ID: D-D-B-B-002-007_保卫管理3): 未知错误: [Errno 22] Invalid argument
-第 11433 行 (ID: E-D-B-B-008-002_保卫管理3): 未知错误: [Errno 22] Invalid argument
+ : 数据库提交失败: (sqlite3.IntegrityError) UNIQUE constraint failed: questions.id
+[SQL: INSERT INTO questions (id, question_type_code, question_number, stem, option_a, option_b, option_c, option_d, option_e, image_info, correct_answer, difficulty_code, consistency_code, analysis, created_at, updated_at, question_bank_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: [('B-A-A-A-001-001#e7e75c66-4916-4da5-bbe8-7391f0f408ab', 'B（单选题）', '', '这是一道关于知识点 A-A-A 的单选题。ID: B-A-A-A-001-001', '选项A for B-A-A-A-001-001', '选项B for B-A-A-A-001-001', '选项C for B-A-A-A-001-001', '选项D for B-A-A-A-001-001', '', '', 'A', '2（简单）', '3（中等）', '这是对题目 B-A-A-A-001-001 的详细解析。', '2025-07-04 16:04:21.600160', '2025-07-04 16:04:21.600166', 'e7e75c66-4916-4da5-bbe8-7391f0f408ab'), ('B-A-A-A-001-002#e7e75c66-4916-4da5-bbe8-7391f0f408ab', 'B（单选题）', '', '这是一道关于知识点 A-A-A 的单选题。ID: B-A-A-A-001-002', '选项A for B-A-A-A-001-002', '选项B for B-A-A-A-001-002', '选项C for B-A-A-A-001-002', '选项D for B-A-A-A-001-002', '', '', 'A', '2（简单）', '3（中等）', '这是对题目 B-A-A-A-001-002 的详细解析。', '2025-07-04 16:04:21.600168', '2025-07-04 16:04:21.600171', 'e7e75c66-4916-4da5-bbe8-7391f0f408ab'), ('B-A-A-A-001-003#e7e75c66-4916-4da5-bbe8-7391f0f408ab', 'B（单选题）', '', '这是一道关于知识点 A-A-A 的单选题。ID: B-A-A-A-001-003', '选项A for B-A-A-A-001-003', '选项B for B-A-A-A-001-003', '选项C for B-A-A-A-001-003', '选项D for B-A-A-A-001-003', '', '', 'A', '2（简单）', '3（中等）', '这是对题目 B-A-A-A-001-003 的详细解析。', '2025-07-04 16:04:21.600173', '2025-07-04 16:04:21.600175', 'e7e75c66-4916-4da5-bbe8-7391f0f408ab'), ('B-A-A-A-001-004#e7e75c66-4916-4da5-bbe8-7391f0f408ab', 'B（单选题）', '', '这是一道关于知识点 A-A-A 的单选题。ID: B-A-A-A-001-004', '选项A for B-A-A-A-001-004', '选项B for B-A-A-A-001-004', '选项C for B-A-A-A-001-004', '选项D for B-A-A-A-001-004', '', '', 'A', '3（中等）', '3（中等）', '这是对题目 B-A-A-A-001-004 的详细解析。', '2025-07-04 16:04:21.600177', '2025-07-04 16:04:21.600178', 'e7e75c66-4916-4da5-bbe8-7391f0f408ab'), ('B-A-A-A-001-005#e7e75c66-4916-4da5-bbe8-7391f0f408ab', 'B（单选题）', '', '这是一道关于知识点 A-A-A 的单选题。ID: B-A-A-A-001-005', '选项A for B-A-A-A-001-005', '选项B for B-A-A-A-001-005', '选项C for B-A-A-A-001-005', '选项D for B-A-A-A-001-005', '', '', 'A', '2（简单）', '3（中等）', '这是对题目 B-A-A-A-001-005 的详细解析。', '2025-07-04 16:04:21.600180', '2025-07-04 16:04:21.600182', 'e7e75c66-4916-4da5-bbe8-7391f0f408ab'), ('B-A-A-A-001-006#e7e75c66-4916-4da5-bbe8-7391f0f408ab', 'B（单选题）', '', '这是一道关于知识点 A-A-A 的单选题。ID: B-A-A-A-001-006', '选项A for B-A-A-A-001-006', '选项B for B-A-A-A-001-006', '选项C for B-A-A-A-001-006', '选项D for B-A-A-A-001-006', '', '', 'A', '4（困难）', '3（中等）', '这是对题目 B-A-A-A-001-006 的详细解析。', '2025-07-04 16:04:21.600183', '2025-07-04 16:04:21.600185', 'e7e75c66-4916-4da5-bbe8-7391f0f408ab'), ('B-A-A-A-001-007#e7e75c66-4916-4da5-bbe8-7391f0f408ab', 'B（单选题）', '', '这是一道关于知识点 A-A-A 的单选题。ID: B-A-A-A-001-007', '选项A for B-A-A-A-001-007', '选项B for B-A-A-A-001-007', '选项C for B-A-A-A-001-007', '选项D for B-A-A-A-001-007', '', '', 'A', '3（中等）', '3（中等）', '这是对题目 B-A-A-A-001-007 的详细解析。', '2025-07-04 16:04:21.600187', '2025-07-04 16:04:21.600188', 'e7e75c66-4916-4da5-bbe8-7391f0f408ab'), ('B-A-A-A-001-008#e7e75c66-4916-4da5-bbe8-7391f0f408ab', 'B（单选题）', '', '这是一道关于知识点 A-A-A 的单选题。ID: B-A-A-A-001-008', '选项A for B-A-A-A-001-008', '选项B for B-A-A-A-001-008', '选项C for B-A-A-A-001-008', '选项D for B-A-A-A-001-008', '', '', 'A', '4（困难）', '3（中等）', '这是对题目 B-A-A-A-001-008 的详细解析。', '2025-07-04 16:04:21.600190', '2025-07-04 16:04:21.600191', 'e7e75c66-4916-4da5-bbe8-7391f0f408ab')  ... displaying 10 of 35933 total bound parameter sets ...  ('F-D-B-B-009-014#58ca7841-e661-47cb-8576-fa8a9300395e', 'F（综合题）', '', '这是一道关于知识点 D-B-B 的组合题。ID: F-D-B-B-009-014', '', '', '', '', '', '', 'A', '4（困难）', '3（中等）', '这是对题目 F-D-B-B-009-014 的详细解析。', '2025-07-04 16:04:21.714217', '2025-07-04 16:04:21.714219', '58ca7841-e661-47cb-8576-fa8a9300395e'), ('F-D-B-B-009-015#58ca7841-e661-47cb-8576-fa8a9300395e', 'F（综合题）', '', '这是一道关于知识点 D-B-B 的组合题。ID: F-D-B-B-009-015', '', '', '', '', '', '', 'A', '3（中等）', '3（中等）', '这是对题目 F-D-B-B-009-015 的详细解析。', '2025-07-04 16:04:21.714221', '2025-07-04 16:04:21.714222', '58ca7841-e661-47cb-8576-fa8a9300395e')]]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
