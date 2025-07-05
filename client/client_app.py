@@ -1055,206 +1055,273 @@ class ExamPageView(tk.Frame):
             # 注意：不添加else分支，这样就不会取消选择
     
     def show_question(self):
-        # 清空上一题的内容
-        for widget in self.question_frame.winfo_children():
-            widget.destroy()
+        try:
+            print(f"🔍 [DEBUG] show_question开始执行")
+            print(f"    current_question_index: {self.current_question_index}")
+            print(f"    questions总数: {len(self.questions) if self.questions else 0}")
 
-        if not self.questions:
-            no_question_label = tk.Label(
-                self.question_frame, 
-                text="📝 本次考试没有题目。", 
+            # 清空上一题的内容
+            for widget in self.question_frame.winfo_children():
+                widget.destroy()
+
+            if not self.questions:
+                print(f"    ❌ 没有题目数据")
+                no_question_label = tk.Label(
+                    self.question_frame,
+                    text="📝 本次考试没有题目。",
+                    font=("Microsoft YaHei", 14),
+                    fg=self.colors['dark'],
+                    bg=self.colors['white']
+                )
+                no_question_label.pack(expand=True)
+                return
+
+            # 获取当前题目
+            question = self.questions[self.current_question_index]
+            q_id = question.get('id')
+            q_type = question.get('type')
+
+            print(f"    ✅ 当前题目: {q_id}, 类型: {q_type}")
+
+            # 更新导航标签
+            self.question_nav_label.config(text=f"第 {self.current_question_index + 1} / {len(self.questions)} 题")
+
+            # 显示题干
+            if q_type in ['single', 'single_choice']:
+                q_type_display = "(单选题)"
+            elif q_type in ['multiple', 'multiple_choice']:
+                q_type_display = "(多选题)"
+            elif q_type == 'true_false':
+                q_type_display = "(判断题)"
+            elif q_type == 'fill_blank':
+                q_type_display = "(填空题)"
+            elif q_type == 'short_answer':
+                q_type_display = "(简答题)"
+            elif q_type == 'essay':
+                q_type_display = "(论述题)"
+            else:
+                q_type_display = "(未知题型)"
+
+            q_text = f"{self.current_question_index + 1}. {q_type_display} {question.get('content')}"
+            print(f"    📝 创建题目标签: {q_text[:50]}...")
+
+            question_label = tk.Label(
+                self.question_frame,
+                text=q_text,
                 font=("Microsoft YaHei", 14),
-                fg=self.colors['dark'],
-                bg=self.colors['white']
+                justify=tk.LEFT,
+                wraplength=700,
+                bg=self.colors['white'],
+                fg=self.colors['dark']
             )
-            no_question_label.pack(expand=True)
-            return
+            question_label.pack(anchor='w', pady=10)
+            print(f"    ✅ 题目标签创建成功")
 
-        # 获取当前题目
-        question = self.questions[self.current_question_index]
-        q_id = question.get('id')
-        
-        # 更新导航标签
-        self.question_nav_label.config(text=f"第 {self.current_question_index + 1} / {len(self.questions)} 题")
+            # 根据题型创建选项
+            options = question.get('options', [])
 
-        # 显示题干
-        q_type_display = ""
-        q_type = question.get('type')
-        if q_type in ['single', 'single_choice']:
-            q_type_display = "(单选题)"
-        elif q_type in ['multiple', 'multiple_choice']:
-            q_type_display = "(多选题)"
-        elif q_type == 'true_false':
-            q_type_display = "(判断题)"
-        elif q_type == 'fill_blank':
-            q_type_display = "(填空题)"
-        elif q_type == 'short_answer':
-            q_type_display = "(简答题)"
-        
-        q_text = f"{self.current_question_index + 1}. {q_type_display} {question.get('content')}"
-        tk.Label(self.question_frame, text=q_text, font=("Microsoft YaHei", 14), justify=tk.LEFT, wraplength=700).pack(anchor='w', pady=10)
-        
-        # 根据题型创建选项
-        options = question.get('options', [])
+            # 处理不同类型的题目
+            if q_type in ['single', 'single_choice'] or q_type == 'true_false':
+                # 单选或判断
+                # 创建一个新的StringVar，确保初始状态为未选中
+                var = tk.StringVar(value="")
 
-        # 处理不同类型的题目
-        if q_type in ['single', 'single_choice'] or q_type == 'true_false':
-            # 单选或判断
-            # 创建一个新的StringVar，确保初始状态为未选中
-            var = tk.StringVar(value="")
-            
-            # 获取已保存的答案（如果有）
-            saved_answer = ""
-            answer_obj = self.answers.get(q_id)
-            if answer_obj is not None:
-                if isinstance(answer_obj, tk.StringVar):
-                    saved_answer = answer_obj.get()
-                elif isinstance(answer_obj, str):
-                    saved_answer = answer_obj
-            
-            # 存储变量以便后续获取值
-            self.answers[q_id] = var
-            
-            # 判断题特殊处理
-            if q_type == 'true_false':
-                # 确保判断题的选项是标准的
-                options = ["正确", "错误"] if not options else options
-            
-            # 创建一个Frame来容纳选项
-            options_frame = tk.Frame(self.question_frame, bg=self.colors['white'])
-            options_frame.pack(fill='x', padx=10, pady=5)
-            
-            # 创建自定义单选按钮组
-            selected_option = None
-            option_buttons = []
-            
-            # 创建选项按钮
-            for opt in options:
-                # 创建一个Frame来容纳每个选项
-                option_frame = tk.Frame(options_frame, bg=self.colors['white'])
-                option_frame.pack(fill='x', pady=2, anchor='w')
-                
-                # 检查是否是已保存的答案
-                is_selected = (saved_answer == opt)
-                if is_selected:
-                    var.set(opt)  # 设置已保存的答案
-                    selected_option = opt
-                
-                # 创建一个自定义的单选按钮（使用Label + 圆形指示器）
-                button_frame = tk.Frame(option_frame, bg=self.colors['white'])
-                button_frame.pack(side='left', fill='x')
-                
-                # 创建圆形指示器
-                indicator = tk.Label(button_frame, text="○" if not is_selected else "●", 
+                # 获取已保存的答案（如果有）
+                saved_answer = ""
+                answer_obj = self.answers.get(q_id)
+                if answer_obj is not None:
+                    if isinstance(answer_obj, tk.StringVar):
+                        saved_answer = answer_obj.get()
+                    elif isinstance(answer_obj, str):
+                        saved_answer = answer_obj
+
+                # 存储变量以便后续获取值
+                self.answers[q_id] = var
+
+                # 判断题特殊处理
+                if q_type == 'true_false':
+                    # 确保判断题的选项是标准的
+                    options = ["正确", "错误"] if not options else options
+
+                # 创建一个Frame来容纳选项
+                options_frame = tk.Frame(self.question_frame, bg=self.colors['white'])
+                options_frame.pack(fill='x', padx=10, pady=5)
+
+                # 创建自定义单选按钮组
+                selected_option = None
+                option_buttons = []
+
+                # 创建选项按钮
+                for opt in options:
+                    # 创建一个Frame来容纳每个选项
+                    option_frame = tk.Frame(options_frame, bg=self.colors['white'])
+                    option_frame.pack(fill='x', pady=2, anchor='w')
+
+                    # 检查是否是已保存的答案
+                    is_selected = (saved_answer == opt)
+                    if is_selected:
+                        var.set(opt)  # 设置已保存的答案
+                        selected_option = opt
+
+                    # 创建一个自定义的单选按钮（使用Label + 圆形指示器）
+                    button_frame = tk.Frame(option_frame, bg=self.colors['white'])
+                    button_frame.pack(side='left', fill='x')
+
+                    # 创建圆形指示器
+                    indicator = tk.Label(button_frame, text="○" if not is_selected else "●",
+                                        font=("Microsoft YaHei", 12),
+                                        bg=self.colors['white'], fg="black")
+                    indicator.pack(side='left', padx=(5, 2))
+
+                    # 创建选项文本
+                    label = tk.Label(button_frame, text=opt,
                                     font=("Microsoft YaHei", 12),
                                     bg=self.colors['white'], fg="black")
-                indicator.pack(side='left', padx=(5, 2))
-                
-                # 创建选项文本
-                label = tk.Label(button_frame, text=opt, 
-                                font=("Microsoft YaHei", 12),
-                                bg=self.colors['white'], fg="black")
-                label.pack(side='left', padx=2)
-                
-                # 存储按钮组件，以便后续更新
-                option_buttons.append((opt, indicator, label))
-                
-                # 为整个按钮区域添加点击事件
-                def select_option(event, o=opt, buttons=option_buttons, v=var):
-                    # 更新所有按钮的状态
-                    for opt_text, ind, _ in buttons:
-                        ind.config(text="○" if opt_text != o else "●")
-                    # 设置变量值
-                    v.set(o)
-                    # 调用更新函数
-                    self.update_single_choice(q_id, o)
-                    return 'break'
-                
-                # 为按钮的所有部分绑定点击事件
-                button_frame.bind('<Button-1>', select_option)
-                indicator.bind('<Button-1>', select_option)
-                label.bind('<Button-1>', select_option)
+                    label.pack(side='left', padx=2)
 
-        elif q_type in ['multiple', 'multiple_choice']:
-            # 多选
-            vars = {}
-            # 确保current_answers是一个空列表，避免默认选中
-            current_answers = []
-            answer_obj = self.answers.get(q_id)
-            if isinstance(answer_obj, dict):
-                # 如果已经有保存的答案，从字典中提取选中的选项
-                current_answers = [opt for opt, var in answer_obj.items() if isinstance(var, tk.BooleanVar) and var.get()]
-            elif isinstance(answer_obj, list):
-                current_answers = self.answers.get(q_id)
-                
-            # 创建一个Frame来容纳选项
-            options_frame = tk.Frame(self.question_frame, bg=self.colors['white'])
-            options_frame.pack(fill='x', padx=10, pady=5)
-                
-            for opt in options:
-                # 创建一个Frame来容纳每个选项
-                option_frame = tk.Frame(options_frame, bg=self.colors['white'])
-                option_frame.pack(fill='x', pady=2, anchor='w')
-                
-                var = tk.BooleanVar(value=False)  # 确保初始状态为未选中
-                if opt in current_answers:  # 只有当有已保存的答案时才设置为选中
-                    var.set(True)
-                    
-                # 使用Checkbutton显示选项文本，添加command回调函数
-                cb = tk.Checkbutton(option_frame, text=opt, variable=var, 
-                                   font=("Microsoft YaHei", 12), 
-                                   takefocus=False, indicatoron=True,
-                                   bg=self.colors['white'], fg="black", 
-                                   activebackground=self.colors['white'],
-                                   selectcolor="#d9d9d9",
-                                   highlightthickness=0,
-                                   command=lambda v=var, o=opt: self.update_multiple_choice(q_id, o, v.get()))
-                cb.pack(side='left', padx=5, fill='x')
-                
-                vars[opt] = var
-            self.answers[q_id] = vars # 存储所有选项的tk变量
-            
-        elif q_type == 'fill_blank':
-            # 填空题
-            current_answer = self.answers.get(q_id, '')
-            answer_frame = tk.Frame(self.question_frame, bg=self.colors['white'])
-            answer_frame.pack(fill='x', padx=20, pady=10)
-            
-            answer_label = tk.Label(answer_frame, text="答案：", font=("Microsoft YaHei", 12), bg=self.colors['white'])
-            answer_label.pack(side='left')
-            
-            answer_entry = tk.Entry(answer_frame, font=("Microsoft YaHei", 12), width=30)
-            answer_entry.pack(side='left', padx=5)
-            answer_entry.insert(0, current_answer)
+                    # 存储按钮组件，以便后续更新
+                    option_buttons.append((opt, indicator, label))
 
-            # 为输入框绑定事件，防止触发防作弊警告
-            self.setup_input_widget_events(answer_entry)
+                    # 为整个按钮区域添加点击事件
+                    def select_option(event, o=opt, buttons=option_buttons, v=var):
+                        # 更新所有按钮的状态
+                        for opt_text, ind, _ in buttons:
+                            ind.config(text="○" if opt_text != o else "●")
+                        # 设置变量值
+                        v.set(o)
+                        # 调用更新函数
+                        self.update_single_choice(q_id, o)
+                        return 'break'
 
-            # 将Entry对象存储到answers字典中
-            self.answers[q_id] = answer_entry
-            
-        elif q_type == 'short_answer':
-            # 简答题
-            current_answer = self.answers.get(q_id, '')
-            answer_frame = tk.Frame(self.question_frame, bg=self.colors['white'])
-            answer_frame.pack(fill='x', padx=20, pady=10)
-            
-            answer_label = tk.Label(answer_frame, text="答案：", font=("Microsoft YaHei", 12), bg=self.colors['white'])
-            answer_label.pack(anchor='w')
-            
-            answer_text = tk.Text(answer_frame, font=("Microsoft YaHei", 12), width=50, height=10)
-            answer_text.pack(fill='both', expand=True, padx=5, pady=5)
-            answer_text.insert('1.0', current_answer)
+                    # 为按钮的所有部分绑定点击事件
+                    button_frame.bind('<Button-1>', select_option)
+                    indicator.bind('<Button-1>', select_option)
+                    label.bind('<Button-1>', select_option)
 
-            # 为文本框绑定事件，防止触发防作弊警告
-            self.setup_input_widget_events(answer_text)
+            elif q_type in ['multiple', 'multiple_choice']:
+                # 多选
+                vars = {}
+                # 确保current_answers是一个空列表，避免默认选中
+                current_answers = []
+                answer_obj = self.answers.get(q_id)
+                if isinstance(answer_obj, dict):
+                    # 如果已经有保存的答案，从字典中提取选中的选项
+                    current_answers = [opt for opt, var in answer_obj.items() if isinstance(var, tk.BooleanVar) and var.get()]
+                elif isinstance(answer_obj, list):
+                    current_answers = self.answers.get(q_id)
 
-            # 将Text对象存储到answers字典中
-            self.answers[q_id] = answer_text
+                # 创建一个Frame来容纳选项
+                options_frame = tk.Frame(self.question_frame, bg=self.colors['white'])
+                options_frame.pack(fill='x', padx=10, pady=5)
 
-        # 更新按钮状态
-        self.prev_button.config(state=tk.NORMAL if self.current_question_index > 0 else tk.DISABLED)
-        self.next_button.config(state=tk.NORMAL if self.current_question_index < len(self.questions) - 1 else tk.DISABLED)
+                for opt in options:
+                    # 创建一个Frame来容纳每个选项
+                    option_frame = tk.Frame(options_frame, bg=self.colors['white'])
+                    option_frame.pack(fill='x', pady=2, anchor='w')
+
+                    var = tk.BooleanVar(value=False)  # 确保初始状态为未选中
+                    if opt in current_answers:  # 只有当有已保存的答案时才设置为选中
+                        var.set(True)
+
+                    # 使用Checkbutton显示选项文本，添加command回调函数
+                    cb = tk.Checkbutton(option_frame, text=opt, variable=var,
+                                       font=("Microsoft YaHei", 12),
+                                       takefocus=False, indicatoron=True,
+                                       bg=self.colors['white'], fg="black",
+                                       activebackground=self.colors['white'],
+                                       selectcolor="#d9d9d9",
+                                       highlightthickness=0,
+                                       command=lambda v=var, o=opt: self.update_multiple_choice(q_id, o, v.get()))
+                    cb.pack(side='left', padx=5, fill='x')
+
+                    vars[opt] = var
+                self.answers[q_id] = vars # 存储所有选项的tk变量
+
+            elif q_type == 'fill_blank':
+                # 填空题
+                current_answer = self.answers.get(q_id, '')
+                answer_frame = tk.Frame(self.question_frame, bg=self.colors['white'])
+                answer_frame.pack(fill='x', padx=20, pady=10)
+
+                answer_label = tk.Label(answer_frame, text="答案：", font=("Microsoft YaHei", 12), bg=self.colors['white'])
+                answer_label.pack(side='left')
+
+                answer_entry = tk.Entry(answer_frame, font=("Microsoft YaHei", 12), width=30)
+                answer_entry.pack(side='left', padx=5)
+                answer_entry.insert(0, current_answer)
+
+                # 为输入框绑定事件，防止触发防作弊警告
+                self.setup_input_widget_events(answer_entry)
+
+                # 将Entry对象存储到answers字典中
+                self.answers[q_id] = answer_entry
+
+            elif q_type == 'short_answer':
+                # 简答题
+                current_answer = self.answers.get(q_id, '')
+                answer_frame = tk.Frame(self.question_frame, bg=self.colors['white'])
+                answer_frame.pack(fill='x', padx=20, pady=10)
+
+                answer_label = tk.Label(answer_frame, text="答案：", font=("Microsoft YaHei", 12), bg=self.colors['white'])
+                answer_label.pack(anchor='w')
+
+                answer_text = tk.Text(answer_frame, font=("Microsoft YaHei", 12), width=50, height=10)
+                answer_text.pack(fill='both', expand=True, padx=5, pady=5)
+                answer_text.insert('1.0', current_answer)
+
+                # 为文本框绑定事件，防止触发防作弊警告
+                self.setup_input_widget_events(answer_text)
+
+                # 将Text对象存储到answers字典中
+                self.answers[q_id] = answer_text
+
+            elif q_type == 'essay':
+                # 论述题
+                current_answer = self.answers.get(q_id, '')
+                answer_frame = tk.Frame(self.question_frame, bg=self.colors['white'])
+                answer_frame.pack(fill='x', padx=20, pady=10)
+
+                answer_label = tk.Label(answer_frame, text="答案：", font=("Microsoft YaHei", 12), bg=self.colors['white'])
+                answer_label.pack(anchor='w')
+
+                # 论述题使用更大的文本框
+                answer_text = tk.Text(answer_frame, font=("Microsoft YaHei", 12), width=60, height=15)
+                answer_text.pack(fill='both', expand=True, padx=5, pady=5)
+                answer_text.insert('1.0', current_answer)
+
+                # 为文本框绑定事件，防止触发防作弊警告
+                self.setup_input_widget_events(answer_text)
+
+                # 将Text对象存储到answers字典中
+                self.answers[q_id] = answer_text
+
+            # 更新按钮状态
+            prev_enabled = self.current_question_index > 0
+            next_enabled = self.current_question_index < len(self.questions) - 1
+
+            print(f"    🔘 更新按钮状态:")
+            print(f"       上一题按钮: {'启用' if prev_enabled else '禁用'}")
+            print(f"       下一题按钮: {'启用' if next_enabled else '禁用'}")
+
+            self.prev_button.config(state=tk.NORMAL if prev_enabled else tk.DISABLED)
+            self.next_button.config(state=tk.NORMAL if next_enabled else tk.DISABLED)
+
+            print(f"    ✅ show_question执行完成")
+
+        except Exception as e:
+            print(f"    ❌ show_question执行异常: {e}")
+            import traceback
+            traceback.print_exc()
+
+            # 显示错误信息
+            error_label = tk.Label(
+                self.question_frame,
+                text=f"❌ 题目显示错误: {str(e)}",
+                font=("Microsoft YaHei", 12),
+                fg="red",
+                bg=self.colors['white']
+            )
+            error_label.pack(expand=True)
 
     def setup_input_widget_events(self, widget):
         """为输入组件设置事件处理，防止触发防作弊警告"""
@@ -1324,16 +1391,30 @@ class ExamPageView(tk.Frame):
             self.answers[q_id] = answer_obj.get('1.0', 'end-1c')
 
     def next_question(self):
+        print(f"🔄 [DEBUG] next_question被调用")
+        print(f"    当前索引: {self.current_question_index}")
+        print(f"    题目总数: {len(self.questions)}")
+
         self._save_current_answer()
         if self.current_question_index < len(self.questions) - 1:
             self.current_question_index += 1
+            print(f"    ✅ 前进到第{self.current_question_index + 1}题")
             self.show_question()
+        else:
+            print(f"    ⚠️ 已在最后一题，无法前进")
 
     def prev_question(self):
+        print(f"🔄 [DEBUG] prev_question被调用")
+        print(f"    当前索引: {self.current_question_index}")
+        print(f"    题目总数: {len(self.questions)}")
+
         self._save_current_answer()
         if self.current_question_index > 0:
             self.current_question_index -= 1
+            print(f"    ✅ 后退到第{self.current_question_index + 1}题")
             self.show_question()
+        else:
+            print(f"    ⚠️ 已在第一题，无法后退")
 
     def update_timer(self):
         """更新倒计时显示"""

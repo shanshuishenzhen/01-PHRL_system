@@ -68,11 +68,11 @@ def login(username, password):
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             
-            # 查找匹配的用户（通过用户名或身份证号）
+            # 查找匹配的用户（通过用户名、身份证号或ID）
             cursor.execute("""
-                SELECT * FROM users 
-                WHERE (username = ? OR id_card = ?) AND password = ?
-            """, (username, username, password))
+                SELECT * FROM users
+                WHERE (username = ? OR id_card = ? OR id = ?) AND password = ?
+            """, (username, username, username, password))
             
             user = cursor.fetchone()
             if user:
@@ -667,10 +667,21 @@ def get_paper_from_question_bank(paper_id_or_exam_id):
             print(f"无法识别paper_id格式: {paper_id_or_exam_id}")
             return None
 
-        # 连接题库数据库
-        db_path = get_absolute_path('question_bank_web/local_dev.db')
-        if not os.path.exists(db_path):
-            print(f"题库数据库不存在: {db_path}")
+        # 连接题库数据库 - 优先使用questions.db
+        db_paths = [
+            get_absolute_path('question_bank_web/questions.db'),
+            get_absolute_path('question_bank_web/local_dev.db')
+        ]
+
+        db_path = None
+        for path in db_paths:
+            if os.path.exists(path):
+                db_path = path
+                print(f"使用数据库: {db_path}")
+                break
+
+        if not db_path:
+            print(f"题库数据库不存在，检查路径: {db_paths}")
             return None
 
         import sqlite3
@@ -714,13 +725,14 @@ def get_paper_from_question_bank(paper_id_or_exam_id):
         # 转换题目格式
         questions = []
         for q in questions_data:
-            # 映射题目类型
+            # 映射题目类型 - 修正映射关系
             question_type_map = {
-                'A': 'single_choice',
-                'B': 'multiple_choice',
-                'C': 'true_false',
-                'D': 'fill_blank',
-                'E': 'essay'
+                'B': 'single_choice',    # 单选题
+                'G': 'multiple_choice',  # 多选题
+                'C': 'true_false',       # 判断题
+                'T': 'fill_blank',       # 填空题
+                'D': 'short_answer',     # 简答题
+                'E': 'essay'             # 论述题
             }
 
             # 使用索引访问而不是字典键
@@ -735,13 +747,26 @@ def get_paper_from_question_bank(paper_id_or_exam_id):
             }
 
             # 处理选择题的选项
-            if question_type in ['single_choice', 'multiple_choice']:
+            if question_type in ['single_choice', 'multiple_choice', 'true_false']:
                 options = []
                 # q[3] 到 q[7] 是 option_a 到 option_e
                 for i in range(3, 8):
                     option_value = q[i]
                     if option_value and option_value.strip():
                         options.append(option_value.strip())
+
+                # 判断题特殊处理：如果没有选项或选项不标准，使用默认选项
+                if question_type == 'true_false':
+                    if not options or len(options) < 2:
+                        # 检查是否有option_a和option_b
+                        if q[3] and q[4]:  # option_a和option_b
+                            options = [q[3].strip(), q[4].strip()]
+                        else:
+                            # 使用默认判断题选项
+                            options = ["正确", "错误"]
+                    # 确保判断题只有两个选项
+                    options = options[:2]
+
                 question["options"] = options
 
             # 注意：不在客户端暴露正确答案
@@ -761,7 +786,7 @@ def get_paper_from_question_bank(paper_id_or_exam_id):
             "question_count": len(questions)
         }
 
-        print(f"成功从题库获取试卷: {paper['title']}, 共 {len(questions)} 道题")
+        print(f"成功从题库获取试卷: {paper[1]}, 共 {len(questions)} 道题")
         return exam_details
 
     except Exception as e:

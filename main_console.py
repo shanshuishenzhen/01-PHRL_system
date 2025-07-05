@@ -958,16 +958,37 @@ class MainConsole:
     def start_client(self):
         """启动客户机端模块"""
         try:
-            # 启动客户机端模块
-            process = subprocess.Popen([sys.executable, os.path.join("client", "client_app.py")])
-            
+            # 检查修复版客户端是否存在
+            fixed_client_path = "client_fixed.py"
+            original_client_path = os.path.join("client", "client_app.py")
+
+            if os.path.exists(fixed_client_path):
+                # 优先使用修复版客户端
+                print(f"🚀 启动修复版客户端: {fixed_client_path}")
+                process = subprocess.Popen([sys.executable, fixed_client_path])
+                client_type = "修复版客户端"
+            elif os.path.exists(original_client_path):
+                # 使用原始客户端
+                print(f"🚀 启动原始客户端: {original_client_path}")
+                process = subprocess.Popen([sys.executable, original_client_path])
+                client_type = "原始客户端"
+            else:
+                messagebox.showerror("错误", "找不到客户端文件")
+                return
+
             # 更新模块状态
             self.module_status["client"]["process"] = process
-            self.module_status["client"]["status"] = "运行中"
+            self.module_status["client"]["status"] = f"运行中 ({client_type})"
             self.module_status["client"]["start_time"] = datetime.now()
             self.update_module_status()
+
+            # 静默启动，不显示成功对话框，避免干扰用户体验
+            print(f"✅ {client_type}已启动")
+
         except Exception as e:
-            messagebox.showerror("错误", f"启动客户机端模块失败: {e}")
+            error_msg = f"启动客户机端模块失败: {e}"
+            print(f"❌ {error_msg}")
+            messagebox.showerror("错误", error_msg)
 
     def start_exam_management(self):
         """启动考试管理模块"""
