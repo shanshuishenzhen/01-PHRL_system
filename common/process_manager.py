@@ -512,25 +512,39 @@ def get_module_ports():
 def get_module_path(module_name):
     """
     获取模块文件路径
-    
+
     Args:
         module_name (str): 模块名称
-        
+
     Returns:
         str: 模块文件路径
     """
     base_dir = Path(__file__).parent.parent
-    
+
+    # 特殊处理客户端模块 - 智能选择最佳客户端
+    if module_name == "client":
+        client_options = [
+            base_dir / "standalone_client.py",  # 优先使用独立客户端
+            base_dir / "client_fixed.py",       # 其次使用修复版客户端
+            base_dir / "client" / "client_app.py"  # 最后使用原始客户端
+        ]
+
+        for client_path in client_options:
+            if client_path.exists():
+                return str(client_path)
+
+        # 如果都不存在，返回默认路径
+        return str(base_dir / "client" / "client_app.py")
+
     module_paths = {
         "main_console": base_dir / "main_console.py",
         "question_bank": base_dir / "question_bank_web" / "app.py",
         "grading_center": base_dir / "grading_center" / "simple_grading_server.py",
         "exam_management": base_dir / "exam_management" / "simple_exam_manager.py",
-        "client": base_dir / "client" / "client_app.py",
         "user_management": base_dir / "user_management" / "simple_user_manager.py",
         "developer_tools": base_dir / "developer_tools.py"
     }
-    
+
     return str(module_paths.get(module_name, ""))
 
 

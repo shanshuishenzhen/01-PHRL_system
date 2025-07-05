@@ -1,226 +1,156 @@
-# PH&RL 在线考试系统
+# 🎓 PH&RL 专业技能认证考试系统
 
-[![Python](https://img.shields.io/badge/Python-3.6+-blue.svg)](https://www.python.org/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)]()
+## 📋 项目概述
 
-## 📋 项目简介
+PH&RL（Professional & Reliable）考试系统是一个完整的专业技能认证考试解决方案，支持多种题型、防作弊功能和自动阅卷。
 
-PH&RL 在线考试系统是一个基于 Python 的现代化、模块化考试管理平台，采用分布式微服务架构，提供完整的在线考试解决方案。系统界面简洁美观，功能操作简单，支持题库管理、用户管理、考试管理、成绩统计、阅卷中心、客户机端等核心功能。
+## 🏗️ 系统架构
 
-### ✨ 核心特性
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   题库管理      │    │   考试管理      │    │   阅卷中心      │
+│ Question Bank   │    │ Exam Management │    │ Grading Center  │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                       │                       │
+         └───────────────────────┼───────────────────────┘
+                                 │
+         ┌─────────────────────────────────────────────┐
+         │              客户端 (Standalone Client)      │
+         │            • 考试答题界面                    │
+         │            • 防作弊功能                      │
+         │            • 离线答题支持                    │
+         └─────────────────────────────────────────────┘
+```
 
-- 🏗️ **模块化架构**：各功能模块独立开发、独立部署，支持水平扩展
-- 🔒 **安全可靠**：多层安全防护，支持用户认证、权限管理、数据加密
-- 🚀 **高性能**：支持并发考试、实时阅卷、智能评分
-- 📊 **智能分析**：提供丰富的数据分析和可视化功能
-- 🔧 **易于维护**：完善的日志系统、监控告警、自动化测试
-- 🌐 **跨平台**：支持Windows、Linux、macOS多平台部署
-- 📱 **响应式设计**：支持PC、平板、手机等多种设备
+## ✨ 主要功能
+
+### 🎯 核心功能
+- **多题型支持**：单选、多选、判断、填空、简答、论述题
+- **智能组卷**：自动组卷和手动组卷
+- **防作弊系统**：全屏模式、进程监控、焦点检测
+- **自动阅卷**：客观题自动评分，主观题辅助评分
+- **成绩管理**：成绩统计、分析和导出
+
+### 🛡️ 安全特性
+- **多层认证**：用户认证 + 隐藏超级管理员
+- **权限控制**：基于角色的访问控制
+- **数据加密**：敏感数据加密存储
+- **审计日志**：完整的操作日志记录
+
+### 🌐 网络功能
+- **局域网部署**：支持C/S架构部署
+- **离线支持**：支持离线答题和同步
+- **批量管理**：支持批量用户和考试管理
 
 ## 🚀 快速开始
 
 ### 环境要求
+- **操作系统**：Windows 10/11
+- **Python**：3.8+
+- **数据库**：SQLite/MySQL
+- **网络**：局域网环境
 
-- **Python**: 3.6 或更高版本
-- **操作系统**: Windows 10/11, macOS, Linux
-- **内存**: 建议 4GB 以上
-- **磁盘空间**: 建议 2GB 以上
-
-### 安装步骤
+### 安装部署
 
 1. **克隆项目**
-   ```bash
-   git clone https://github.com/shanshuishenzhen/01-PHRH_system.git
-   cd 01-PHRH_system
-   ```
-
-2. **创建虚拟环境**
-   ```bash
-   # Windows
-   python -m venv .venv
-   .venv\Scripts\activate
-   
-   # Linux/macOS
-   python3 -m venv .venv
-   source .venv/bin/activate
-   ```
-
-3. **安装依赖**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **初始化系统**
-   ```bash
-   python manage.py init_db
-   ```
-
-5. **启动系统**
-   ```bash
-   # 方式一：使用启动器（推荐）
-   python start_system.py
-   
-   # 方式二：使用管理工具
-   python manage.py start
-   ```
-
-### 快速体验
-
-启动系统后，您可以：
-
-1. **访问主控台**: 运行 `python main_console.py`
-2. **访问题库管理**: 浏览器打开 `http://localhost:5000`
-3. **访问考试管理**: 浏览器打开 `http://localhost:5001`
-4. **访问阅卷中心**: 浏览器打开 `http://localhost:3000`
-
-### 默认账户
-
-系统初始化后会创建以下默认账户：
-
-| 用户名 | 密码 | 角色 | 说明 |
-|--------|------|------|------|
-| admin | admin123 | 超级管理员 | 系统管理员账户 |
-| teacher | teacher123 | 教师 | 示例教师账户 |
-| student | student123 | 学生 | 示例学生账户 |
-
-## 🏗️ 系统架构
-
-### 核心模块
-
-- **启动器 (Launcher)**: 系统入口点，负责启动和管理整个系统
-- **主控台 (Main Console)**: 管理和监控系统的各个模块
-- **题库管理**: 题目创建、编辑、分类管理
-- **用户管理**: 用户注册、认证、权限管理
-- **考试管理**: 考试创建、发布、监控
-- **阅卷中心**: 自动阅卷、手动阅卷、评分管理
-- **成绩统计**: 成绩分析、报表生成
-- **客户端**: 学生考试界面
-
-### 技术栈
-
-- **后端**: Python, Flask
-- **前端**: HTML, CSS, JavaScript
-- **数据库**: SQLite (可扩展到 PostgreSQL/MySQL)
-- **缓存**: Redis (可选)
-- **测试**: pytest
-- **部署**: Docker, Docker Compose
-
-## 🧪 测试
-
-### 运行测试
-
 ```bash
-# 安装测试依赖
-pip install pytest pytest-cov pytest-html pytest-xdist
-
-# 运行所有测试
-python run_tests.py --all
-
-# 运行单元测试
-python run_tests.py --unit
-
-# 运行集成测试
-python run_tests.py --integration
-
-# 生成覆盖率报告
-python run_tests.py --coverage
+git clone https://github.com/shanshuishenzhen/01-PHRL_system.git
+cd 01-PHRL_system
 ```
 
-### 测试结构
-
-```
-tests/
-├── unit/           # 单元测试
-├── integration/    # 集成测试
-├── e2e/           # 端到端测试
-└── utils/         # 测试工具
-```
-
-## 🔧 配置
-
-### 环境配置
-
-复制 `.env.example` 为 `.env` 并根据需要修改配置：
-
+2. **安装依赖**
 ```bash
-cp .env.example .env
+pip install -r requirements.txt
 ```
 
-主要配置项：
-
-- `DATABASE_URL`: 数据库连接地址
-- `REDIS_URL`: Redis连接地址
-- `SECRET_KEY`: 应用密钥
-- `EMAIL_*`: 邮件服务配置
-
-### 端口配置
-
-默认端口分配：
-
-- API网关: 8000
-- 题库管理: 5000
-- 考试管理: 5001
-- 阅卷中心: 3000
-- 用户管理: 5002
-- 成绩统计: 5003
-
-## 🐳 Docker 部署
-
-### 使用 Docker Compose
-
+3. **启动服务**
 ```bash
 # 启动所有服务
-docker-compose up -d
+python start_all_services.py
 
-# 查看服务状态
-docker-compose ps
-
-# 停止服务
-docker-compose down
+# 或分别启动各个模块
+python exam_management/app.py
+python question_bank_web/app.py
+python standalone_client.py
 ```
 
-### 单独构建
+4. **访问系统**
+- 题库管理：http://localhost:5001
+- 考试管理：http://localhost:5002
+- 客户端：直接运行可执行文件
 
-```bash
-# 构建镜像
-docker build -t phrl-exam-system .
+## 📚 文档指南
 
-# 运行容器
-docker run -d -p 8000:8000 --name phrl-exam phrl-exam-system
+- **[完整系统指南](COMPLETE_SYSTEM_GUIDE.md)**：系统完整使用指南
+- **[客户端通信指南](CLIENT_SERVER_COMMUNICATION_GUIDE.md)**：客户端与服务器通信配置
+- **[快速部署指南](QUICK_DEPLOYMENT_GUIDE.md)**：快速部署和配置
+- **[约定管理指南](CONVENTIONS_MANAGEMENT_GUIDE.md)**：系统约定和规范管理
+
+## 🔧 配置说明
+
+### 服务器配置
+```json
+{
+    "server": {
+        "host": "192.168.1.100",
+        "port": 5000,
+        "protocol": "http",
+        "timeout": 30
+    }
+}
 ```
 
-## 📚 文档
+### 客户端配置
+```json
+{
+    "ui": {
+        "fullscreen_exam": true,
+        "theme_color": "#2196F3"
+    },
+    "security": {
+        "enable_anti_cheat": true
+    }
+}
+```
 
-- [API 文档](docs/api.md)
-- [部署指南](docs/deployment.md)
-- [开发指南](docs/development.md)
-- [故障排除](docs/troubleshooting.md)
+## 🎯 使用场景
 
-## 🤝 贡献
+- **教育机构**：学校、培训机构的在线考试
+- **企业培训**：员工技能认证和培训考核
+- **资格认证**：专业资格认证考试
+- **竞赛活动**：各类知识竞赛和技能比赛
 
-欢迎提交 Pull Request 和 Issue！
+## 🛠️ 技术栈
 
-1. Fork 项目
-2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 打开 Pull Request
+- **后端**：Python Flask, SQLAlchemy
+- **前端**：HTML5, CSS3, JavaScript, Tkinter
+- **数据库**：SQLite, MySQL
+- **网络**：HTTP/HTTPS RESTful API
+- **安全**：JWT认证, 数据加密
+
+## 📊 系统特点
+
+- **高可靠性**：稳定的系统架构和容错机制
+- **易部署**：支持一键部署和批量配置
+- **可扩展**：模块化设计，易于扩展功能
+- **用户友好**：直观的用户界面和操作流程
+
+## 🤝 贡献指南
+
+欢迎提交Issue和Pull Request来改进项目！
 
 ## 📄 许可证
 
-本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
+本项目采用MIT许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
 
-## 📞 支持
+## 📞 技术支持
 
-- 📧 Email: support@phrl.com
-- 🐛 Bug 报告: [GitHub Issues](https://github.com/shanshuishenzhen/01-PHRH_system/issues)
-- 📖 文档: [在线文档](https://docs.phrl.com)
-
-## 🙏 致谢
-
-感谢所有为这个项目做出贡献的开发者！
+如有问题或建议，请通过以下方式联系：
+- 提交Issue：[GitHub Issues](https://github.com/shanshuishenzhen/01-PHRL_system/issues)
+- 邮件联系：[技术支持邮箱]
 
 ---
 
-**PH&RL 在线考试系统** - 让考试管理更简单、更高效！ 🎓✨
+**🎓 PH&RL考试系统 - 专业、可靠的考试解决方案**
+
+*最后更新：2025-07-06*

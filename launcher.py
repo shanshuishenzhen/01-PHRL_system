@@ -1259,7 +1259,80 @@ class LauncherApp:
         Returns:
             bool: 是否成功启动
         """
-        return self.start_module("client")
+        try:
+            # 更新状态
+            self.status_var.set("正在启动客户机端...")
+            self.module_status["client"]["status"] = "starting"
+            self.update_module_tree()
+
+            # 检查可用的客户端文件（优先级顺序）
+            client_options = [
+                {
+                    "path": "standalone_client.py",
+                    "name": "独立客户端",
+                    "description": "完全独立运行，支持局域网通信"
+                },
+                {
+                    "path": "client_fixed.py",
+                    "name": "修复版客户端",
+                    "description": "修复了判断题和语法问题的客户端"
+                },
+                {
+                    "path": os.path.join("client", "client_app.py"),
+                    "name": "原始客户端",
+                    "description": "原始客户端（需要主控台运行）"
+                }
+            ]
+
+            selected_client = None
+            for client in client_options:
+                if os.path.exists(client["path"]):
+                    selected_client = client
+                    break
+
+            if not selected_client:
+                self.module_status["client"]["status"] = "error"
+                self.status_var.set("启动客户机端失败: 找不到客户端文件")
+                messagebox.showerror("错误", "找不到任何可用的客户端文件")
+                return False
+
+            # 启动选中的客户端
+            logger.info(f"启动客户端: {selected_client['name']} ({selected_client['path']})")
+
+            if os.name == 'nt':  # Windows
+                # 在新的命令窗口中启动客户端
+                cmd = f'start "PH&RL 客户端" cmd /k "cd /d {project_root} && python {selected_client["path"]}"'
+                process = subprocess.Popen(cmd, shell=True)
+            else:  # Linux/Mac
+                process = subprocess.Popen([sys.executable, selected_client["path"]])
+
+            # 等待一下确保进程启动
+            time.sleep(1)
+
+            # 更新模块状态
+            self.module_status["client"]["pid"] = process.pid
+            self.module_status["client"]["status"] = "running"
+            self.status_var.set(f"客户机端已启动: {selected_client['name']}")
+            self.update_module_tree()
+
+            # 显示启动信息
+            messagebox.showinfo(
+                "启动成功",
+                f"客户机端已启动\n\n"
+                f"类型: {selected_client['name']}\n"
+                f"说明: {selected_client['description']}\n"
+                f"文件: {selected_client['path']}"
+            )
+
+            logger.info(f"客户端启动成功: {selected_client['name']}")
+            return True
+
+        except Exception as e:
+            logger.error(f"启动客户端失败: {e}")
+            self.module_status["client"]["status"] = "error"
+            self.status_var.set("启动客户机端失败")
+            messagebox.showerror("错误", f"启动客户机端失败: {str(e)}")
+            return False
 
     @handle_error
     def start_developer_tools(self):

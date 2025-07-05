@@ -26,6 +26,17 @@ if project_root not in sys.path:
 
 from developer_tools.question_bank_generator import generate_from_excel
 
+# 导入约定管理器
+try:
+    from common.conventions_manager import get_conventions_manager, apply_conventions
+    conventions_manager = get_conventions_manager()
+    CONVENTIONS_AVAILABLE = True
+    print("✅ 约定管理器加载成功")
+except ImportError as e:
+    print(f"⚠️ 约定管理器不可用: {e}")
+    conventions_manager = None
+    CONVENTIONS_AVAILABLE = False
+
 # 全局常量
 USER_DATA_FILE = os.path.join(project_root, 'user_management', 'users.json')
 # 修改这一行
@@ -62,10 +73,14 @@ class DeveloperTools:
         notebook.pack(fill=tk.BOTH, expand=True)
         user_tab = ttk.Frame(notebook)
         question_tab = ttk.Frame(notebook)
+        conventions_tab = ttk.Frame(notebook)
+        natural_lang_tab = ttk.Frame(notebook)
         validation_tab = ttk.Frame(notebook)
         danger_zone_tab = ttk.Frame(notebook)
         notebook.add(user_tab, text="用户生成")
         notebook.add(question_tab, text="样例题库生成")
+        notebook.add(conventions_tab, text="约定管理")
+        notebook.add(natural_lang_tab, text="自然语言约定")
         notebook.add(validation_tab, text="验证复核")
         notebook.add(danger_zone_tab, text="危险区域")
 
@@ -75,6 +90,8 @@ class DeveloperTools:
         # 初始化各标签页
         self.create_user_generation_tab(user_tab)
         self.create_question_generation_tab(question_tab)
+        self.create_conventions_management_tab(conventions_tab)
+        self.create_natural_language_tab(natural_lang_tab)
         self.create_validation_tab(validation_tab)
         self.create_danger_zone_tab(danger_zone_tab)
         
@@ -805,6 +822,871 @@ class DeveloperTools:
             os.startfile(file_path)
         except Exception as e:
             messagebox.showerror("错误", f"打开报告文件失败: {e}")
+
+    def create_conventions_management_tab(self, parent):
+        """创建约定管理标签页"""
+        frame = ttk.Frame(parent, padding=20)
+        frame.pack(fill=tk.BOTH, expand=True)
+
+        # 标题
+        title_label = ttk.Label(frame, text="系统约定管理", font=("Microsoft YaHei", 16, "bold"))
+        title_label.pack(pady=(0, 20))
+
+        # 检查约定管理器状态
+        if not CONVENTIONS_AVAILABLE:
+            error_frame = ttk.Frame(frame)
+            error_frame.pack(fill=tk.X, pady=20)
+
+            error_label = ttk.Label(error_frame, text="❌ 约定管理器不可用",
+                                  font=("Microsoft YaHei", 12), foreground="red")
+            error_label.pack()
+
+            help_label = ttk.Label(error_frame, text="请确保 common/conventions_manager.py 文件存在",
+                                 font=("Microsoft YaHei", 10), foreground="gray")
+            help_label.pack(pady=(5, 0))
+            return
+
+        # 状态显示
+        status_frame = ttk.Frame(frame)
+        status_frame.pack(fill=tk.X, pady=(0, 10))
+
+        self.conventions_status = tk.StringVar(value="就绪")
+        status_label = ttk.Label(status_frame, textvariable=self.conventions_status,
+                               font=("Microsoft YaHei", 10), foreground="blue")
+        status_label.pack(side=tk.LEFT)
+
+        # 创建主要区域
+        main_paned = ttk.PanedWindow(frame, orient=tk.HORIZONTAL)
+        main_paned.pack(fill=tk.BOTH, expand=True)
+
+        # 左侧：约定类别列表
+        left_frame = ttk.Frame(main_paned)
+        main_paned.add(left_frame, weight=1)
+
+        ttk.Label(left_frame, text="约定类别", font=("Microsoft YaHei", 12, "bold")).pack(pady=(0, 10))
+
+        # 约定类别列表框
+        listbox_frame = ttk.Frame(left_frame)
+        listbox_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+
+        self.conventions_listbox = tk.Listbox(listbox_frame, font=("Microsoft YaHei", 10))
+        scrollbar_left = ttk.Scrollbar(listbox_frame, orient=tk.VERTICAL, command=self.conventions_listbox.yview)
+        self.conventions_listbox.configure(yscrollcommand=scrollbar_left.set)
+
+        self.conventions_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar_left.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self.conventions_listbox.bind('<<ListboxSelect>>', self.on_convention_category_select)
+
+        # 左侧按钮
+        left_btn_frame = ttk.Frame(left_frame)
+        left_btn_frame.pack(fill=tk.X)
+
+        ttk.Button(left_btn_frame, text="刷新列表", command=self.refresh_conventions_list).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(left_btn_frame, text="新增类别", command=self.add_convention_category).pack(side=tk.LEFT, padx=5)
+
+        # 右侧：约定内容编辑
+        right_frame = ttk.Frame(main_paned)
+        main_paned.add(right_frame, weight=2)
+
+        ttk.Label(right_frame, text="约定内容编辑", font=("Microsoft YaHei", 12, "bold")).pack(pady=(0, 10))
+
+        # 当前编辑的约定路径
+        self.current_convention_path = tk.StringVar()
+        path_frame = ttk.Frame(right_frame)
+        path_frame.pack(fill=tk.X, pady=(0, 10))
+        ttk.Label(path_frame, text="当前路径:").pack(side=tk.LEFT)
+        ttk.Label(path_frame, textvariable=self.current_convention_path,
+                 font=("Consolas", 10), foreground="blue").pack(side=tk.LEFT, padx=(5, 0))
+
+        # 约定内容文本编辑器
+        text_frame = ttk.Frame(right_frame)
+        text_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+
+        # 添加滚动条
+        self.conventions_text = tk.Text(text_frame, font=("Consolas", 10), wrap=tk.WORD)
+        scrollbar_right = ttk.Scrollbar(text_frame, orient=tk.VERTICAL, command=self.conventions_text.yview)
+        self.conventions_text.configure(yscrollcommand=scrollbar_right.set)
+
+        self.conventions_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar_right.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # 右侧按钮
+        right_btn_frame = ttk.Frame(right_frame)
+        right_btn_frame.pack(fill=tk.X)
+
+        ttk.Button(right_btn_frame, text="保存更改", command=self.save_convention_changes).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(right_btn_frame, text="重置内容", command=self.reset_convention_content).pack(side=tk.LEFT, padx=5)
+        ttk.Button(right_btn_frame, text="删除约定", command=self.delete_convention).pack(side=tk.LEFT, padx=5)
+        ttk.Button(right_btn_frame, text="验证约定", command=self.validate_conventions).pack(side=tk.LEFT, padx=5)
+
+        # 初始化
+        self.refresh_conventions_list()
+
+    def create_natural_language_tab(self, parent):
+        """创建自然语言约定标签页"""
+        frame = ttk.Frame(parent, padding=20)
+        frame.pack(fill=tk.BOTH, expand=True)
+
+        # 标题
+        title_label = ttk.Label(frame, text="🗣️ 自然语言约定需求", font=("Microsoft YaHei", 16, "bold"))
+        title_label.pack(pady=(0, 10))
+
+        # 说明
+        desc_label = ttk.Label(frame,
+                              text="用自然语言描述您的约定需求，系统会自动理解并应用到约定模块中",
+                              font=("Microsoft YaHei", 10))
+        desc_label.pack(pady=(0, 20))
+
+        # 检查约定管理器状态
+        if not CONVENTIONS_AVAILABLE:
+            error_label = ttk.Label(frame, text="❌ 约定管理器不可用",
+                                  font=("Microsoft YaHei", 12), foreground="red")
+            error_label.pack(pady=10)
+            return
+
+        # 示例提示
+        example_frame = ttk.LabelFrame(frame, text="💡 示例", padding=10)
+        example_frame.pack(fill=tk.X, pady=(0, 15))
+
+        examples = [
+            "• 把超级管理员的密码改成 'admin2024'",
+            "• 判断题的选项改成 '对' 和 '错'",
+            "• 主题色改成红色，辅助色改成绿色",
+            "• 考试时间默认改成90分钟",
+            "• 学生默认权限增加查看成绩",
+            "• 题库管理端口改成6000"
+        ]
+
+        for example in examples:
+            ttk.Label(example_frame, text=example, font=("Microsoft YaHei", 9)).pack(anchor="w")
+
+        # 输入区域
+        input_label = ttk.Label(frame, text="请用自然语言描述您的约定需求：",
+                               font=("Microsoft YaHei", 12, "bold"))
+        input_label.pack(anchor="w", pady=(0, 5))
+
+        # 输入文本框
+        self.nl_input_text = tk.Text(frame, height=6, font=("Microsoft YaHei", 11))
+        self.nl_input_text.pack(fill=tk.X, pady=(0, 10))
+
+        # 按钮区域
+        button_frame = ttk.Frame(frame)
+        button_frame.pack(fill=tk.X, pady=(0, 10))
+
+        ttk.Button(button_frame, text="🔍 理解需求", command=self.nl_understand_requirement).pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Button(button_frame, text="✅ 应用约定", command=self.nl_apply_requirement).pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Button(button_frame, text="🗑️ 清空输入", command=self.nl_clear_input).pack(side=tk.LEFT)
+
+        # 理解结果显示
+        result_label = ttk.Label(frame, text="理解结果：", font=("Microsoft YaHei", 12, "bold"))
+        result_label.pack(anchor="w", pady=(10, 5))
+
+        self.nl_result_text = tk.Text(frame, height=8, font=("Consolas", 10))
+        self.nl_result_text.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+
+        # 状态栏
+        self.nl_status_var = tk.StringVar(value="就绪")
+        status_label = ttk.Label(frame, textvariable=self.nl_status_var,
+                               font=("Microsoft YaHei", 9), foreground="blue")
+        status_label.pack(side=tk.BOTTOM)
+
+    def refresh_conventions_list(self):
+        """刷新约定类别列表"""
+        try:
+            self.conventions_listbox.delete(0, tk.END)
+
+            if not conventions_manager or not conventions_manager.conventions:
+                self.conventions_status.set("❌ 约定配置为空")
+                return
+
+            # 获取所有约定类别
+            categories = []
+            for key in conventions_manager.conventions.keys():
+                if key != "system_info":  # 排除系统信息
+                    categories.append(key)
+
+            # 添加到列表框
+            for category in sorted(categories):
+                self.conventions_listbox.insert(tk.END, category)
+
+            self.conventions_status.set(f"✅ 已加载 {len(categories)} 个约定类别")
+
+        except Exception as e:
+            self.conventions_status.set(f"❌ 刷新失败: {e}")
+            messagebox.showerror("错误", f"刷新约定列表失败: {e}")
+
+    def on_convention_category_select(self, event):
+        """约定类别选择事件"""
+        try:
+            selection = self.conventions_listbox.curselection()
+            if not selection:
+                return
+
+            category = self.conventions_listbox.get(selection[0])
+            self.current_convention_path.set(category)
+
+            # 获取约定内容
+            convention_data = conventions_manager.get_convention(category, {})
+
+            # 格式化为可读的文本
+            formatted_text = self.format_convention_data(convention_data)
+
+            # 显示在文本编辑器中
+            self.conventions_text.delete(1.0, tk.END)
+            self.conventions_text.insert(1.0, formatted_text)
+
+            self.conventions_status.set(f"✅ 已加载约定: {category}")
+
+        except Exception as e:
+            self.conventions_status.set(f"❌ 加载失败: {e}")
+            messagebox.showerror("错误", f"加载约定内容失败: {e}")
+
+    def format_convention_data(self, data, indent=0):
+        """格式化约定数据为可读文本"""
+        lines = []
+        indent_str = "  " * indent
+
+        if isinstance(data, dict):
+            for key, value in data.items():
+                if isinstance(value, (dict, list)):
+                    lines.append(f"{indent_str}{key}:")
+                    lines.append(self.format_convention_data(value, indent + 1))
+                else:
+                    lines.append(f"{indent_str}{key}: {value}")
+        elif isinstance(data, list):
+            for i, item in enumerate(data):
+                if isinstance(item, (dict, list)):
+                    lines.append(f"{indent_str}[{i}]:")
+                    lines.append(self.format_convention_data(item, indent + 1))
+                else:
+                    lines.append(f"{indent_str}- {item}")
+        else:
+            lines.append(f"{indent_str}{data}")
+
+        return "\n".join(lines)
+
+    def parse_convention_text(self, text):
+        """解析文本为约定数据结构"""
+        try:
+            lines = text.strip().split('\n')
+            result = {}
+            stack = [result]
+
+            for line in lines:
+                if not line.strip():
+                    continue
+
+                # 计算缩进级别
+                indent_level = (len(line) - len(line.lstrip())) // 2
+                content = line.strip()
+
+                # 调整栈深度
+                while len(stack) > indent_level + 1:
+                    stack.pop()
+
+                current_dict = stack[-1]
+
+                if ':' in content and not content.startswith('-'):
+                    # 键值对
+                    key, value = content.split(':', 1)
+                    key = key.strip()
+                    value = value.strip()
+
+                    if value:
+                        # 尝试转换数据类型
+                        if value.lower() in ['true', 'false']:
+                            value = value.lower() == 'true'
+                        elif value.isdigit():
+                            value = int(value)
+                        elif value.replace('.', '').isdigit():
+                            value = float(value)
+
+                        current_dict[key] = value
+                    else:
+                        # 空值，准备嵌套结构
+                        current_dict[key] = {}
+                        stack.append(current_dict[key])
+                elif content.startswith('-'):
+                    # 列表项
+                    item = content[1:].strip()
+                    if not isinstance(current_dict, list):
+                        # 转换为列表
+                        parent_key = list(stack[-2].keys())[-1] if len(stack) > 1 else None
+                        if parent_key:
+                            stack[-2][parent_key] = []
+                            current_dict = stack[-2][parent_key]
+                            stack[-1] = current_dict
+
+                    if isinstance(current_dict, list):
+                        current_dict.append(item)
+
+            return result
+
+        except Exception as e:
+            raise ValueError(f"解析文本失败: {e}")
+
+    def save_convention_changes(self):
+        """保存约定更改"""
+        try:
+            category = self.current_convention_path.get()
+            if not category:
+                messagebox.showwarning("警告", "请先选择一个约定类别")
+                return
+
+            # 获取文本内容
+            text_content = self.conventions_text.get(1.0, tk.END).strip()
+
+            if not text_content:
+                messagebox.showwarning("警告", "约定内容不能为空")
+                return
+
+            # 解析文本为数据结构
+            try:
+                parsed_data = self.parse_convention_text(text_content)
+            except ValueError as e:
+                messagebox.showerror("解析错误", f"文本格式错误: {e}")
+                return
+
+            # 确认保存
+            if not messagebox.askyesno("确认保存", f"确定要保存对约定类别 '{category}' 的更改吗？"):
+                return
+
+            # 更新约定
+            success = conventions_manager.update_convention(category, parsed_data)
+
+            if success:
+                self.conventions_status.set(f"✅ 已保存约定: {category}")
+                messagebox.showinfo("成功", f"约定 '{category}' 已成功保存")
+                self.refresh_conventions_list()
+            else:
+                self.conventions_status.set(f"❌ 保存失败: {category}")
+                messagebox.showerror("错误", f"保存约定 '{category}' 失败")
+
+        except Exception as e:
+            self.conventions_status.set(f"❌ 保存失败: {e}")
+            messagebox.showerror("错误", f"保存约定失败: {e}")
+
+    def reset_convention_content(self):
+        """重置约定内容"""
+        try:
+            category = self.current_convention_path.get()
+            if not category:
+                messagebox.showwarning("警告", "请先选择一个约定类别")
+                return
+
+            if not messagebox.askyesno("确认重置", f"确定要重置约定类别 '{category}' 的内容吗？\n这将丢失所有未保存的更改。"):
+                return
+
+            # 重新加载原始内容
+            convention_data = conventions_manager.get_convention(category, {})
+            formatted_text = self.format_convention_data(convention_data)
+
+            self.conventions_text.delete(1.0, tk.END)
+            self.conventions_text.insert(1.0, formatted_text)
+
+            self.conventions_status.set(f"✅ 已重置约定: {category}")
+
+        except Exception as e:
+            self.conventions_status.set(f"❌ 重置失败: {e}")
+            messagebox.showerror("错误", f"重置约定内容失败: {e}")
+
+    def delete_convention(self):
+        """删除约定"""
+        try:
+            category = self.current_convention_path.get()
+            if not category:
+                messagebox.showwarning("警告", "请先选择一个约定类别")
+                return
+
+            if not messagebox.askyesno("确认删除", f"确定要删除约定类别 '{category}' 吗？\n此操作不可恢复！"):
+                return
+
+            # 删除约定
+            if category in conventions_manager.conventions:
+                del conventions_manager.conventions[category]
+
+                # 保存更改
+                conventions_manager.save_config()
+
+                # 清空编辑器
+                self.conventions_text.delete(1.0, tk.END)
+                self.current_convention_path.set("")
+
+                # 刷新列表
+                self.refresh_conventions_list()
+
+                self.conventions_status.set(f"✅ 已删除约定: {category}")
+                messagebox.showinfo("成功", f"约定类别 '{category}' 已删除")
+            else:
+                messagebox.showerror("错误", f"约定类别 '{category}' 不存在")
+
+        except Exception as e:
+            self.conventions_status.set(f"❌ 删除失败: {e}")
+            messagebox.showerror("错误", f"删除约定失败: {e}")
+
+    def add_convention_category(self):
+        """添加新的约定类别"""
+        try:
+            # 弹出输入对话框
+            category_name = tk.simpledialog.askstring("新增约定类别", "请输入新约定类别的名称:")
+
+            if not category_name:
+                return
+
+            # 验证名称
+            if category_name in conventions_manager.conventions:
+                messagebox.showerror("错误", f"约定类别 '{category_name}' 已存在")
+                return
+
+            if not category_name.replace('_', '').isalnum():
+                messagebox.showerror("错误", "约定类别名称只能包含字母、数字和下划线")
+                return
+
+            # 创建新约定类别
+            new_convention = {
+                "description": f"{category_name} 约定配置",
+                "created_at": "2025-07-05",
+                "example_setting": "example_value"
+            }
+
+            # 添加到约定管理器
+            success = conventions_manager.update_convention(category_name, new_convention)
+
+            if success:
+                self.refresh_conventions_list()
+
+                # 选择新创建的类别
+                for i in range(self.conventions_listbox.size()):
+                    if self.conventions_listbox.get(i) == category_name:
+                        self.conventions_listbox.selection_set(i)
+                        self.on_convention_category_select(None)
+                        break
+
+                self.conventions_status.set(f"✅ 已创建约定类别: {category_name}")
+                messagebox.showinfo("成功", f"约定类别 '{category_name}' 已创建")
+            else:
+                messagebox.showerror("错误", f"创建约定类别 '{category_name}' 失败")
+
+        except Exception as e:
+            self.conventions_status.set(f"❌ 创建失败: {e}")
+            messagebox.showerror("错误", f"创建约定类别失败: {e}")
+
+    def validate_conventions(self):
+        """验证约定配置"""
+        try:
+            self.conventions_status.set("🔍 正在验证约定配置...")
+
+            # 验证约定
+            errors = conventions_manager.validate_conventions()
+
+            if not errors:
+                self.conventions_status.set("✅ 约定配置验证通过")
+                messagebox.showinfo("验证成功", "所有约定配置验证通过！")
+            else:
+                self.conventions_status.set(f"❌ 发现 {len(errors)} 个问题")
+
+                # 显示详细错误信息
+                error_text = "发现以下配置问题:\n\n" + "\n".join(f"• {error}" for error in errors)
+                messagebox.showerror("验证失败", error_text)
+
+        except Exception as e:
+            self.conventions_status.set(f"❌ 验证失败: {e}")
+            messagebox.showerror("错误", f"验证约定配置失败: {e}")
+
+    def nl_understand_requirement(self):
+        """理解自然语言需求"""
+        requirement = self.nl_input_text.get(1.0, tk.END).strip()
+
+        if not requirement:
+            messagebox.showwarning("警告", "请输入约定需求")
+            return
+
+        self.nl_status_var.set("🔍 正在理解需求...")
+
+        try:
+            # 解析自然语言需求
+            parsed_result = self.nl_parse_natural_language(requirement)
+
+            if parsed_result:
+                # 显示理解结果
+                self.nl_result_text.delete(1.0, tk.END)
+                self.nl_result_text.insert(1.0, self.nl_format_parsed_result(parsed_result))
+
+                # 保存解析结果
+                self.nl_current_parsed_result = parsed_result
+
+                self.nl_status_var.set("✅ 需求理解完成")
+                messagebox.showinfo("成功", "需求理解完成！请查看理解结果，确认无误后点击'应用约定'")
+            else:
+                self.nl_status_var.set("❌ 需求理解失败")
+                messagebox.showerror("错误", "无法理解该需求，请尝试用更清晰的语言描述")
+
+        except Exception as e:
+            self.nl_status_var.set(f"❌ 理解失败: {e}")
+            messagebox.showerror("错误", f"理解需求时出错: {e}")
+
+    def nl_parse_natural_language(self, text):
+        """解析自然语言需求"""
+        import re
+
+        # 需求解析规则
+        parsing_rules = [
+            # 超级管理员相关
+            {
+                "pattern": r"(超级管理员|管理员|admin).*密码.*改成.*['\"]([^'\"]+)['\"]",
+                "action": "update_admin_password",
+                "category": "authentication"
+            },
+            {
+                "pattern": r"(超级管理员|管理员|admin).*用户名.*改成.*['\"]([^'\"]+)['\"]",
+                "action": "update_admin_username",
+                "category": "authentication"
+            },
+            {
+                "pattern": r"(超级管理员|管理员|admin).*(隐藏|内置|默认|隐含)",
+                "action": "set_admin_hidden",
+                "category": "authentication"
+            },
+            {
+                "pattern": r"(切换|设置).*(生产|正式).*模式",
+                "action": "switch_to_production",
+                "category": "authentication"
+            },
+            {
+                "pattern": r"(软件开发完成|开发完成|完成开发).*用户名.*phrladmin",
+                "action": "switch_to_production",
+                "category": "authentication"
+            },
+            {
+                "pattern": r"(生成|建议).*(密码|安全密码)",
+                "action": "generate_secure_password",
+                "category": "authentication"
+            },
+
+            # 判断题相关
+            {
+                "pattern": r"判断题.*选项.*改成.*['\"]([^'\"]+)['\"].*['\"]([^'\"]+)['\"]",
+                "action": "update_true_false_options",
+                "category": "exam_conventions"
+            },
+
+            # UI主题相关
+            {
+                "pattern": r"主题色.*改成.*(红色|绿色|蓝色|黄色|紫色|橙色|黑色|白色|灰色|#[0-9A-Fa-f]{6})",
+                "action": "update_primary_color",
+                "category": "ui_conventions"
+            },
+            {
+                "pattern": r"辅助色.*改成.*(红色|绿色|蓝色|黄色|紫色|橙色|黑色|白色|灰色|#[0-9A-Fa-f]{6})",
+                "action": "update_secondary_color",
+                "category": "ui_conventions"
+            },
+
+            # 考试时间相关
+            {
+                "pattern": r"考试时间.*默认.*改成.*?(\d+).*?分钟",
+                "action": "update_exam_duration",
+                "category": "exam_conventions"
+            },
+
+            # 权限相关
+            {
+                "pattern": r"(学生|考生).*权限.*增加.*?([^，。\n\r]+)",
+                "action": "add_student_permission",
+                "category": "authentication"
+            },
+
+            # 端口相关
+            {
+                "pattern": r"(题库管理|question_bank).*端口.*改成.*?(\d+)",
+                "action": "update_question_bank_port",
+                "category": "network_conventions"
+            },
+            {
+                "pattern": r"(主控台|main_console).*端口.*改成.*?(\d+)",
+                "action": "update_main_console_port",
+                "category": "network_conventions"
+            }
+        ]
+
+        # 颜色映射
+        color_map = {
+            "红色": "#F44336", "绿色": "#4CAF50", "蓝色": "#2196F3",
+            "黄色": "#FFEB3B", "紫色": "#9C27B0", "橙色": "#FF9800",
+            "黑色": "#000000", "白色": "#FFFFFF", "灰色": "#9E9E9E"
+        }
+
+        for rule in parsing_rules:
+            match = re.search(rule["pattern"], text, re.IGNORECASE)
+            if match:
+                result = {
+                    "action": rule["action"],
+                    "category": rule["category"],
+                    "original_text": text,
+                    "matched_groups": match.groups()
+                }
+
+                # 根据不同的动作处理参数
+                if rule["action"] == "update_admin_password":
+                    result["new_password"] = match.group(2)
+                elif rule["action"] == "update_admin_username":
+                    result["new_username"] = match.group(2)
+                elif rule["action"] == "set_admin_hidden":
+                    result["hidden_type"] = match.group(2)
+                elif rule["action"] == "switch_to_production":
+                    result["mode"] = "production"
+                elif rule["action"] == "generate_secure_password":
+                    result["password_type"] = "secure"
+                elif rule["action"] == "update_true_false_options":
+                    result["option1"] = match.group(1)
+                    result["option2"] = match.group(2)
+                elif rule["action"] in ["update_primary_color", "update_secondary_color"]:
+                    color = match.group(1)
+                    result["color"] = color_map.get(color, color)
+                elif rule["action"] == "update_exam_duration":
+                    result["duration"] = int(match.group(1))
+                elif rule["action"] == "add_student_permission":
+                    result["permission"] = match.group(2).strip()
+                elif rule["action"] in ["update_question_bank_port", "update_main_console_port"]:
+                    result["port"] = int(match.group(2))
+
+                return result
+
+        return None
+
+    def nl_format_parsed_result(self, result):
+        """格式化解析结果"""
+        lines = []
+        lines.append("🔍 需求理解结果:")
+        lines.append("=" * 40)
+        lines.append(f"原始需求: {result['original_text']}")
+        lines.append(f"约定类别: {result['category']}")
+        lines.append(f"操作类型: {result['action']}")
+        lines.append("")
+
+        # 根据不同操作显示具体内容
+        if result["action"] == "update_admin_password":
+            lines.append(f"将要执行的操作:")
+            lines.append(f"  • 修改超级管理员密码为: {result['new_password']}")
+            lines.append(f"  • 路径: authentication.super_admin.password")
+
+        elif result["action"] == "update_admin_username":
+            lines.append(f"将要执行的操作:")
+            lines.append(f"  • 修改超级管理员用户名为: {result['new_username']}")
+            lines.append(f"  • 路径: authentication.super_admin.username")
+
+        elif result["action"] == "set_admin_hidden":
+            lines.append(f"将要执行的操作:")
+            lines.append(f"  • 设置超级管理员为{result['hidden_type']}模式")
+            lines.append(f"  • 在所有界面中隐藏超级管理员")
+            lines.append(f"  • 路径: authentication.super_admin.hidden")
+
+        elif result["action"] == "switch_to_production":
+            lines.append(f"将要执行的操作:")
+            lines.append(f"  • 切换到生产模式")
+            lines.append(f"  • 用户名改为: phrladmin")
+            lines.append(f"  • 生成系统安全密码")
+            lines.append(f"  • 关闭调试模式")
+
+        elif result["action"] == "generate_secure_password":
+            lines.append(f"将要执行的操作:")
+            lines.append(f"  • 生成安全密码")
+            lines.append(f"  • 16位长度，包含大小写字母、数字、特殊字符")
+            lines.append(f"  • 路径: authentication.super_admin.password")
+
+        elif result["action"] == "update_true_false_options":
+            lines.append(f"将要执行的操作:")
+            lines.append(f"  • 修改判断题选项为: ['{result['option1']}', '{result['option2']}']")
+            lines.append(f"  • 路径: exam_conventions.question_types.true_false.options")
+
+        elif result["action"] == "update_primary_color":
+            lines.append(f"将要执行的操作:")
+            lines.append(f"  • 修改主题色为: {result['color']}")
+            lines.append(f"  • 路径: ui_conventions.theme.primary_color")
+
+        elif result["action"] == "update_secondary_color":
+            lines.append(f"将要执行的操作:")
+            lines.append(f"  • 修改辅助色为: {result['color']}")
+            lines.append(f"  • 路径: ui_conventions.theme.secondary_color")
+
+        elif result["action"] == "update_exam_duration":
+            lines.append(f"将要执行的操作:")
+            lines.append(f"  • 修改默认考试时间为: {result['duration']} 分钟")
+            lines.append(f"  • 路径: exam_conventions.time_limits.default_duration")
+
+        elif result["action"] == "add_student_permission":
+            lines.append(f"将要执行的操作:")
+            lines.append(f"  • 为学生角色添加权限: {result['permission']}")
+            lines.append(f"  • 路径: authentication.default_permissions.student")
+
+        elif result["action"] == "update_question_bank_port":
+            lines.append(f"将要执行的操作:")
+            lines.append(f"  • 修改题库管理端口为: {result['port']}")
+            lines.append(f"  • 路径: network_conventions.default_ports.question_bank")
+
+        elif result["action"] == "update_main_console_port":
+            lines.append(f"将要执行的操作:")
+            lines.append(f"  • 修改主控台端口为: {result['port']}")
+            lines.append(f"  • 路径: network_conventions.default_ports.main_console")
+
+        lines.append("")
+        lines.append("✅ 确认无误后，请点击'应用约定'按钮")
+
+        return "\n".join(lines)
+
+    def nl_apply_requirement(self):
+        """应用约定需求"""
+        if not hasattr(self, 'nl_current_parsed_result'):
+            messagebox.showwarning("警告", "请先理解需求")
+            return
+
+        if not CONVENTIONS_AVAILABLE:
+            messagebox.showerror("错误", "约定管理器不可用")
+            return
+
+        try:
+            result = self.nl_current_parsed_result
+            self.nl_status_var.set("🔄 正在应用约定...")
+
+            success = False
+
+            # 根据不同操作应用约定
+            if result["action"] == "update_admin_password":
+                success = conventions_manager.update_convention(
+                    "authentication.super_admin.password",
+                    result["new_password"]
+                )
+
+            elif result["action"] == "update_admin_username":
+                success = conventions_manager.update_convention(
+                    "authentication.super_admin.username",
+                    result["new_username"]
+                )
+
+            elif result["action"] == "set_admin_hidden":
+                # 设置超级管理员为隐藏模式
+                success = conventions_manager.update_convention(
+                    "authentication.super_admin.hidden", True
+                ) and conventions_manager.update_convention(
+                    "authentication.super_admin.built_in", True
+                ) and conventions_manager.update_convention(
+                    "authentication.super_admin.implicit", True
+                )
+
+            elif result["action"] == "switch_to_production":
+                # 切换到生产模式
+                try:
+                    from common.hidden_super_admin import hidden_super_admin
+                    switch_result = hidden_super_admin.switch_to_production_mode()
+                    if switch_result["success"]:
+                        success = True
+                        messagebox.showinfo("生产模式",
+                                          f"已切换到生产模式\n新用户名: {switch_result['new_username']}\n新密码: {switch_result['new_password']}\n请妥善保存！")
+                    else:
+                        success = False
+                        messagebox.showerror("错误", switch_result["message"])
+                except ImportError:
+                    success = False
+                    messagebox.showerror("错误", "隐藏超级管理员模块不可用")
+
+            elif result["action"] == "generate_secure_password":
+                # 生成安全密码
+                try:
+                    from common.hidden_super_admin import hidden_super_admin
+                    new_password = hidden_super_admin.generate_production_password()
+                    if new_password:
+                        success = conventions_manager.update_convention(
+                            "authentication.super_admin.password", new_password
+                        )
+                        if success:
+                            messagebox.showinfo("密码生成",
+                                              f"新密码: {new_password}\n请妥善保存！")
+                    else:
+                        success = False
+                except ImportError:
+                    success = False
+                    messagebox.showerror("错误", "隐藏超级管理员模块不可用")
+
+            elif result["action"] == "update_true_false_options":
+                success = conventions_manager.update_convention(
+                    "exam_conventions.question_types.true_false.options",
+                    [result["option1"], result["option2"]]
+                )
+
+            elif result["action"] == "update_primary_color":
+                success = conventions_manager.update_convention(
+                    "ui_conventions.theme.primary_color",
+                    result["color"]
+                )
+
+            elif result["action"] == "update_secondary_color":
+                success = conventions_manager.update_convention(
+                    "ui_conventions.theme.secondary_color",
+                    result["color"]
+                )
+
+            elif result["action"] == "update_exam_duration":
+                success = conventions_manager.update_convention(
+                    "exam_conventions.time_limits.default_duration",
+                    result["duration"]
+                )
+
+            elif result["action"] == "add_student_permission":
+                # 获取当前学生权限
+                current_permissions = conventions_manager.get_convention(
+                    "authentication.default_permissions.student", []
+                )
+                if isinstance(current_permissions, list):
+                    new_permission = result["permission"]
+                    if new_permission not in current_permissions:
+                        current_permissions.append(new_permission)
+                        success = conventions_manager.update_convention(
+                            "authentication.default_permissions.student",
+                            current_permissions
+                        )
+                    else:
+                        messagebox.showinfo("提示", f"权限 '{new_permission}' 已存在")
+                        success = True
+
+            elif result["action"] == "update_question_bank_port":
+                success = conventions_manager.update_convention(
+                    "network_conventions.default_ports.question_bank",
+                    result["port"]
+                )
+
+            elif result["action"] == "update_main_console_port":
+                success = conventions_manager.update_convention(
+                    "network_conventions.default_ports.main_console",
+                    result["port"]
+                )
+
+            if success:
+                self.nl_status_var.set("✅ 约定应用成功")
+
+                # 清空输入
+                self.nl_clear_input()
+
+                # 刷新约定管理标签页（如果存在）
+                if hasattr(self, 'refresh_conventions_list'):
+                    self.refresh_conventions_list()
+
+                messagebox.showinfo("成功", "约定已成功应用！\n\n系统将在下次启动相关模块时自动使用新约定。")
+            else:
+                self.nl_status_var.set("❌ 约定应用失败")
+                messagebox.showerror("错误", "应用约定失败，请检查约定管理器状态")
+
+        except Exception as e:
+            self.nl_status_var.set(f"❌ 应用失败: {e}")
+            messagebox.showerror("错误", f"应用约定时出错: {e}")
+
+    def nl_clear_input(self):
+        """清空输入"""
+        self.nl_input_text.delete(1.0, tk.END)
+        self.nl_result_text.delete(1.0, tk.END)
+        if hasattr(self, 'nl_current_parsed_result'):
+            delattr(self, 'nl_current_parsed_result')
+        self.nl_status_var.set("就绪")
 
 def _generate_users_logic(student=0, evaluator=0, admin=0):
     if not os.path.exists(USER_DATA_FILE):

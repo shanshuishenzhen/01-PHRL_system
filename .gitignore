@@ -92,3 +92,74 @@ logs/
 
 # 大文件检查脚本（临时）
 check_large_files.py
+
+
+# PH&RL System - Auto Generated Ignore Rules
+
+# Database files
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Log files
+*.log
+logs/
+
+# Cache and temporary files
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.tmp
+*.temp
+
+# Sensitive files
+*password*
+*secret*
+*private*
+*.env
+exam_backup_*.json
+*_credentials.json
+
+# Large media files
+*.mp4
+*.avi
+*.mov
+*.wmv
+*.flv
+
+# Backup files
+*.bak
+*.backup
+*_backup*
+
+# Development environment
+node_modules/
+venv/
+env/
+.venv/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# System files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Generated reports (keep only essential ones)
+*_REPORT.md
+*_GUIDE.md
+paper_validation_reports/
+
+# Test and debug files
+test_*.py
+debug_*.py
+minimal_*.py
+quick_*.py
+simple_*.py

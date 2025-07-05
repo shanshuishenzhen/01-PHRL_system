@@ -1,0 +1,25 @@
+{
+  "server": {
+    "host": "192.168.1.100",
+    "port": 8080,
+    "protocol": "http",
+    "api_base": "/api"
+  },
+  "client": {
+    "name": "PH&RL 考试客户端",
+    "version": "2.0.0",
+    "auto_save_interval": 30,
+    "connection_timeout": 10,
+    "retry_attempts": 3
+  },
+  "ui": {
+    "fullscreen": true,
+    "disable_shortcuts": true,
+    "font_size": 12,
+    "theme": "light"
+  },
+  "security": {
+    "session_timeout": 3600,
+    "anti_cheat": true
+  }
+}

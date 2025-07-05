@@ -1,0 +1,62 @@
+{
+  "app": {
+    "name": "PH&RL 考试客户端",
+    "version": "1.0.0",
+    "debug": false,
+    "auto_save_interval": 30,
+    "theme": "default"
+  },
+  "server": {
+    "host": "localhost",
+    "port": 5000,
+    "protocol": "http",
+    "timeout": 30,
+    "retry_count": 3,
+    "retry_delay": 5
+  },
+  "ui": {
+    "window_size": "1024x768",
+    "fullscreen_exam": true,
+    "font_family": "Microsoft YaHei",
+    "font_size": 12,
+    "theme_color": "#2196F3",
+    "show_progress": true,
+    "show_timer": true
+  },
+  "security": {
+    "enable_anti_cheat": true,
+    "disable_alt_tab": true,
+    "disable_task_manager": true,
+    "monitor_processes": true,
+    "encrypt_answers": true,
+    "screenshot_protection": true
+  },
+  "exam": {
+    "auto_save_answers": true,
+    "save_interval": 30,
+    "confirm_submit": true,
+    "show_question_numbers": true,
+    "allow_review": true,
+    "time_warning_minutes": 5
+  },
+  "network": {
+    "connection_check_interval": 60,
+    "offline_mode": false,
+    "cache_questions": true,
+    "max_cache_size": 100
+  },
+  "logging": {
+    "level": "INFO",
+    "max_file_size": 10,
+    "backup_count": 5,
+    "log_to_file": true,
+    "log_to_console": false
+  },
+  "test": {
+    "value": "test_data",
+    "setting": "test_value_123",
+    "config": {
+      "key": "test_value_123"
+    }
+  }
+}

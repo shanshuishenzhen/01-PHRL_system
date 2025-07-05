@@ -1,0 +1,281 @@
+{
+  "system_info": {
+    "name": "PH&RL 考试系统全局约定",
+    "version": "1.0.0",
+    "last_updated": "2025-07-05",
+    "description": "系统全局约定条件和默认配置"
+  },
+  "authentication": {
+    "super_admin": {
+      "debug_credentials": {
+        "username": "admin",
+        "password": "123456",
+        "description": "调试阶段凭据，方便开发调试"
+      },
+      "production_credentials": {
+        "username": "phrladmin",
+        "password": "zA39tG$mlZ.5a7i1",
+        "description": "生产阶段凭据，软件开发完成后使用"
+      },
+      "current_mode": "production",
+      "description": "内置超级管理员，完全隐藏，拥有最高权限",
+      "default_permissions": [
+        "all"
+      ],
+      "auto_grant": true,
+      "hidden": true,
+      "built_in": true,
+      "implicit": true,
+      "always_available": true,
+      "never_display": true,
+      "production_password_policy": {
+        "auto_generate": true,
+        "length": 16,
+        "include_special_chars": true,
+        "include_numbers": true,
+        "include_uppercase": true,
+        "include_lowercase": true,
+        "suggestion_method": "system_generated"
+      },
+      "note": "调试时用户名admin密码123456，软件开发完成后用户名改为phrladmin密码由系统给出，在本软件内不显示这个超级用户"
+    },
+    "default_permissions": {
+      "student": [
+        "exam_take",
+        "view_results"
+      ],
+      "teacher": [
+        "exam_create",
+        "exam_manage",
+        "grade_view"
+      ],
+      "admin": [
+        "all"
+      ],
+      "evaluator": [
+        "grade_manage",
+        "exam_review"
+      ]
+    },
+    "password_policy": {
+      "min_length": 6,
+      "require_special_chars": false,
+      "default_password": "password123",
+      "description": "默认密码策略，开发阶段使用简单密码"
+    }
+  },
+  "database": {
+    "default_encoding": "utf-8",
+    "auto_backup": true,
+    "backup_interval": "daily",
+    "connection_pool": {
+      "max_connections": 10,
+      "timeout": 30
+    },
+    "default_tables": [
+      "users",
+      "exams",
+      "questions",
+      "answers",
+      "grades"
+    ]
+  },
+  "ui_conventions": {
+    "theme": {
+      "primary_color": "#2196F3",
+      "secondary_color": "#FFC107",
+      "success_color": "#4CAF50",
+      "error_color": "#F44336",
+      "warning_color": "#FF9800"
+    },
+    "fonts": {
+      "default": "Microsoft YaHei",
+      "size": 12,
+      "title_size": 16
+    },
+    "layout": {
+      "window_size": "800x600",
+      "min_size": "600x400",
+      "fullscreen_exam": true,
+      "scrollable_content": true
+    },
+    "anti_cheat": {
+      "disable_shortcuts": true,
+      "fullscreen_mode": true,
+      "debug_exit_key": "Ctrl+Shift+D"
+    }
+  },
+  "exam_conventions": {
+    "question_types": {
+      "single_choice": {
+        "options_format": [
+          "A",
+          "B",
+          "C",
+          "D"
+        ],
+        "max_options": 4
+      },
+      "multiple_choice": {
+        "options_format": [
+          "A",
+          "B",
+          "C",
+          "D"
+        ],
+        "max_options": 6
+      },
+      "true_false": {
+        "options": [
+          "正确",
+          "错误"
+        ],
+        "fixed_options": true
+      },
+      "fill_blank": {
+        "max_length": 200
+      },
+      "short_answer": {
+        "max_length": 500
+      },
+      "essay": {
+        "max_length": 2000
+      }
+    },
+    "scoring": {
+      "single_choice": 2,
+      "multiple_choice": 3,
+      "true_false": 1,
+      "fill_blank": 2,
+      "short_answer": 5,
+      "essay": 10
+    },
+    "time_limits": {
+      "default_duration": 60,
+      "min_duration": 10,
+      "max_duration": 180,
+      "auto_submit": true
+    }
+  },
+  "network_conventions": {
+    "default_ports": {
+      "main_console": 8000,
+      "question_bank": 5000,
+      "grading_center": 5173,
+      "exam_management": 8001,
+      "user_management": 8002,
+      "mock_server": 5000
+    },
+    "api_endpoints": {
+      "base_url": "/api",
+      "login": "/api/login",
+      "exams": "/api/exams",
+      "submit": "/api/submit",
+      "health": "/api/health"
+    },
+    "timeouts": {
+      "connection": 10,
+      "read": 30,
+      "retry_attempts": 3
+    }
+  },
+  "file_conventions": {
+    "encoding": "utf-8",
+    "line_ending": "\\n",
+    "backup_extension": ".backup",
+    "temp_directory": "temp",
+    "log_directory": "logs",
+    "data_directory": "data",
+    "config_files": [
+      "system_conventions.json",
+      "client_config.json",
+      "server_config.json"
+    ]
+  },
+  "development_conventions": {
+    "code_style": {
+      "indentation": "4 spaces",
+      "max_line_length": 120,
+      "docstring_style": "Google",
+      "import_order": [
+        "standard",
+        "third_party",
+        "local"
+      ]
+    },
+    "testing": {
+      "test_prefix": "test_",
+      "mock_data": true,
+      "auto_cleanup": true
+    },
+    "logging": {
+      "level": "INFO",
+      "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+      "file_rotation": true,
+      "max_size": "10MB"
+    }
+  },
+  "deployment_conventions": {
+    "client_deployment": {
+      "standalone_mode": true,
+      "package_tool": "pyinstaller",
+      "package_options": "--onefile --windowed",
+      "target_platforms": [
+        "Windows",
+        "Linux"
+      ]
+    },
+    "server_deployment": {
+      "lan_support": true,
+      "auto_discovery": false,
+      "ssl_required": false
+    }
+  },
+  "business_rules": {
+    "exam_rules": {
+      "max_attempts": 1,
+      "allow_review": false,
+      "shuffle_questions": true,
+      "shuffle_options": true
+    },
+    "grading_rules": {
+      "auto_grade_objective": true,
+      "manual_grade_subjective": true,
+      "partial_credit": true
+    },
+    "user_rules": {
+      "auto_create_student_id": true,
+      "student_id_format": "数字",
+      "require_real_name": true
+    }
+  },
+  "security_conventions": {
+    "session_management": {
+      "timeout": 3600,
+      "auto_refresh": true,
+      "concurrent_sessions": 1
+    },
+    "data_protection": {
+      "encrypt_passwords": true,
+      "hash_algorithm": "sha256",
+      "salt_length": 16
+    },
+    "audit_logging": {
+      "log_logins": true,
+      "log_exam_actions": true,
+      "log_admin_actions": true
+    }
+  },
+  "integration_conventions": {
+    "module_communication": {
+      "protocol": "HTTP/HTTPS",
+      "data_format": "JSON",
+      "error_handling": "standard_codes"
+    },
+    "data_sync": {
+      "auto_sync": true,
+      "sync_interval": 300,
+      "conflict_resolution": "server_wins"
+    }
+  }
+}
